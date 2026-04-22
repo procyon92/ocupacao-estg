@@ -8,3 +8,6 @@ dados/
 __pycache__/
 *.py[cod]
 *$py.class
+
+# Environment variables
+.env

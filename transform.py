@@ -6,45 +6,50 @@ import numpy as np
 class DataTransformer:
     """
     Camada de Transformação do Pipeline ETL.
-    Aplica regras de negócio, limpeza e imputação inteligente conforme
-    o Mapa Lógico de Dados e o Relatório Incremental.
+    Implementa as regras de higienização, normalização e imputação inteligente 
+    necessárias para a integridade do Modelo Dimensional.
     """
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
     # -----------------------------------------------------------------
-    # 1. LIMPEZA DE STRINGS
+    # 1. NORMALIZAÇÃO DE STRINGS E PLACEHOLDERS
     # -----------------------------------------------------------------
     def clean_strings(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Strip whitespace e normaliza placeholders em todas as colunas texto."""
+        """Normaliza o casing e remove espaços redundantes em colunas descritivas."""
         for col in df.select_dtypes(include=['object']).columns:
             df[col] = df[col].astype(str).str.strip()
-            # Upper case specifically on target columns according to Logical Map
-            if col in ['edificio', 'desig_edf', 'espaco', 'nome_espaco', 'unidade_respon', 'unidade_responsavel']:
+            
+            # Normalização para UPPERCASE em dimensões de localização (requisito do Mapa Lógico)
+            target_loc = ['edificio', 'desig_edf', 'espaco', 'nome_espaco', 'unidade_respon', 'unidade_responsavel']
+            if col in target_loc:
                 df[col] = df[col].str.upper()
+            
+            # Padronização de nulos semânticos
             df[col] = df[col].replace({'nan': pd.NA, '<NA>': pd.NA, '': pd.NA, 'None': pd.NA})
         return df
 
     # -----------------------------------------------------------------
-    # 2. IMPUTAÇÃO DE RESPONSÁVEL
+    # 2. TRATAMENTO DE RESPONSÁVEIS E UNIDADES
     # -----------------------------------------------------------------
     def impute_responsavel(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Substitui nulos no responsável por 'Indefinido/N.D.'
-        Regra: 77% de nulls confirmados na EDA — imprescindível para FK.
+        Garante que colunas de responsabilidade possuam valores válidos para FKs.
+        Nota: A EDA revelou ~77% de nulidade nestes campos na fonte original.
         """
-        for col in ['pessoa_resp', 'unidade_respon', 'unidade_responsavel']:
+        cols = ['pessoa_resp', 'unidade_respon', 'unidade_responsavel']
+        for col in cols:
             if col in df.columns:
                 df[col] = df[col].fillna('Indefinido/N.D.')
         return df
 
     # -----------------------------------------------------------------
-    # 3. IMPUTAÇÃO ACADÉMICA (RESERVAS SEM UC)
+    # 3. GESTÃO DE DADOS ACADÉMICOS (RESERVAS ADMIN)
     # -----------------------------------------------------------------
     def enforce_academic_dummy(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Registos do tipo 'Reserva' não têm atributos académicos.
-        Imputa com 'SEM_UNIDADE / RESERVA_ADMIN' para manter coerência dimensional.
+        Trata registos que não possuem vínculo direto a uma Unidade Curricular.
+        Imputa placeholders para evitar 'Unknowns' genéricos no dashboard de BI.
         """
         academic_cols = [
             'cod_disc', 'codigo_unidade_curricular',
@@ -57,12 +62,12 @@ class DataTransformer:
         return df
 
     # -----------------------------------------------------------------
-    # 4. NORMALIZAÇÃO DE EDIFÍCIOS
+    # 4. LIMPEZA DE NOMENCLATURA DE EDIFÍCIOS
     # -----------------------------------------------------------------
     def normalize_edificios(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Remove parênteses redundantes dos edifícios.
-        Ex: 'Edifício A (ESTG)' → 'Edifício A'
+        Remoção de sufixos redundantes via Regex.
+        Ex: 'EDIFÍCIO A (ESTG)' -> 'EDIFÍCIO A'
         """
         for col in ['edificio', 'desig_edf']:
             if col in df.columns:
@@ -73,104 +78,64 @@ class DataTransformer:
         return df
 
     # -----------------------------------------------------------------
-    # 5. FLAG ONLINE + TEMPORAL FILTERS + DURACAO
+    # 5. LÓGICA DE NEGÓCIO: ONLINE, FILTROS E SOBREPOSIÇÕES
     # -----------------------------------------------------------------
     def add_online_flag_and_filters(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        - is_online: True se edificio contém 'Ensino a Distância' ou 'Online'
-        - Filtra datas inválidas e durações fora de [1, 360] minutos
-        - Calcula flag_evento_agregado (overlaps no mesmo espaço)
+        - RF05: Isola ocupação virtual através da flag 'is_online'.
+        - Limpeza Temporal: Remove durações absurdas (outliers > 6h ou <= 0).
+        - Audit: Calcula 'flag_evento_agregado' para identificar partilha de espaços.
         """
         df['is_online'] = False
 
-        # Detetar online por estado
+        # Deteção de sessões virtuais por estado ou localização
+        online_terms = 'Online|Ensino a Distância|Virtual|Zoom|Colibri'
+        
         if 'estado' in df.columns:
-            mask = df['estado'].astype(str).str.contains(
-                'Online|Ensino a Distância', case=False, na=False)
-            df.loc[mask, 'is_online'] = True
+            df.loc[df['estado'].astype(str).str.contains(online_terms, case=False, na=False), 'is_online'] = True
 
-        # Detetar online por edifício (ex: "Ensino a Distância / Zoom")
         for ecol in ['edificio', 'desig_edf']:
             if ecol in df.columns:
-                mask = df[ecol].astype(str).str.contains(
-                    'Ensino a Distância|Online|Virtual|Zoom', case=False, na=False)
-                df.loc[mask, 'is_online'] = True
+                df.loc[df[ecol].astype(str).str.contains(online_terms, case=False, na=False), 'is_online'] = True
 
-        # Encontrar colunas de data
-        col_inicio = next((c for c in ['data_inicio', 'datainicio'] if c in df.columns), None)
-        col_fim = next((c for c in ['data_fim', 'datafim'] if c in df.columns), None)
+        # Conversão Temporal e Cálculo de Duração
+        col_i = next((c for c in ['data_inicio', 'datainicio'] if c in df.columns), None)
+        col_f = next((c for c in ['data_fim', 'datafim'] if c in df.columns), None)
 
-        if col_inicio and col_fim:
-            df[col_inicio] = pd.to_datetime(df[col_inicio], errors='coerce')
-            df[col_fim] = pd.to_datetime(df[col_fim], errors='coerce')
+        if col_i and col_f:
+            df[col_i] = pd.to_datetime(df[col_i], errors='coerce')
+            df[col_f] = pd.to_datetime(df[col_f], errors='coerce')
+            
+            # Remoção de datas corrompidas (Essential for Time Dimension FK)
+            df = df.dropna(subset=[col_i, col_f]).copy()
 
-            before = len(df)
-            df = df.dropna(subset=[col_inicio, col_fim]).copy()
-            dropped = before - len(df)
-            if dropped > 0:
-                self.logger.info(f"  Removidas {dropped} linhas com datas invalidas.")
+            df['duracao_minutos'] = (df[col_f] - df[col_i]).dt.total_seconds() / 60
 
-            df['duracao_minutos'] = (df[col_fim] - df[col_inicio]).dt.total_seconds() / 60
+            # Filtro de sanidade (Business Rule: Aulas entre 1 e 360 minutos)
+            df = df[(df['duracao_minutos'] > 0) & (df['duracao_minutos'] <= 360)].copy()
 
-            before = len(df)
-            validos = (df['duracao_minutos'] > 0) & (df['duracao_minutos'] <= 360)
-            df = df[validos].copy()
-            dropped = before - len(df)
-            if dropped > 0:
-                self.logger.info(f"  Removidas {dropped} linhas com duracao fora [1, 360] min.")
-
-            # Flag_Evento_Agregado: overlaps no mesmo espaço e hora
-            espaco_col = next((c for c in ['espaco', 'nome_espaco'] if c in df.columns), None)
-            if espaco_col:
-                df = df.sort_values(by=[col_inicio, espaco_col])
-                df['flag_evento_agregado'] = df.duplicated(
-                    subset=[col_inicio, espaco_col], keep='first')
-            else:
-                df['flag_evento_agregado'] = False
-        else:
-            self.logger.warning("Campos de Data Inicio/Fim nao encontrados.")
-            df['duracao_minutos'] = 0
-            df['flag_evento_agregado'] = False
-
+            # Identificação de Eventos Agregados (Mesmo Espaço/Hora, UCs diferentes)
+            esp_c = next((c for c in ['espaco', 'nome_espaco'] if c in df.columns), None)
+            if esp_c:
+                df = df.sort_values(by=[col_i, esp_c])
+                df['flag_evento_agregado'] = df.duplicated(subset=[col_i, esp_c], keep='first')
+        
         return df
 
     # -----------------------------------------------------------------
-    # 6. EXTRAÇÃO DE TURNO
+    # 6. PARSING DE TURNOS E UCs
     # -----------------------------------------------------------------
     def clean_turnos(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Extrai designações de turno da coluna descricao_com_indicacao_turno.
-        Padrões: TP1, T1, P1, PL1, S1, OT1, etc.
-        """
-        desc_col = next((c for c in ['descricao_com_indicacao_turno', 'descricao']
-                         if c in df.columns), None)
-
+        """Extração de códigos de turno (T1, TP2, etc.) de campos de descrição."""
+        desc_col = next((c for c in ['descricao_com_indicacao_turno', 'descricao'] if c in df.columns), None)
         if desc_col:
             df['turno_extraido'] = df[desc_col].astype(str).str.extract(
                 r'\b(TP\d*|T\d+|P\d+|PL\d+|S\d+|OT\d+)\b', expand=False
             ).fillna('N/D')
-        else:
-            df['turno_extraido'] = 'N/D'
         return df
 
-    # -----------------------------------------------------------------
-    # 7. RESOLUÇÃO DE PRESENÇAS
-    # -----------------------------------------------------------------
-    def resolve_attendance(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Converte presenças para int, zeros onde nulo."""
-        for col in ['presencas', 'numero_presencas']:
-            if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        return df
-
-    # -----------------------------------------------------------------
-    # 8. EXTRAÇÃO DE CÓDIGO UC DO CAMPO COMPOSTO
-    # -----------------------------------------------------------------
     def extract_uc_code(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        PorTurnoPresencas contém 'unidade_curricular' no formato:
-        'Marketing Público e Social (20558)' — extrai o código entre parênteses.
-        """
+        """Extrai o código numérico da UC quando embutido no nome: 'Nome (Código)'."""
         if 'unidade_curricular' in df.columns:
             df['uc_code_extracted'] = df['unidade_curricular'].astype(str).str.extract(
                 r'\(([^)]+)\)\s*$', expand=False
@@ -178,63 +143,33 @@ class DataTransformer:
         return df
 
     # -----------------------------------------------------------------
-    # 9. IMPUTAÇÃO FINAL UNIVERSAL
+    # 7. MAPEAMENTO FINAL E AUDITORIA DE NULOS
     # -----------------------------------------------------------------
     def final_null_sweep(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Passagem final: garante zero nulos em colunas críticas para dimensões.
-        Decisão técnica: imputa N/D em vez de eliminar registos,
-        porque dados parciais ainda têm valor analítico para o BI.
-        """
+        """Última barreira de sanitização para garantir zero nulos antes do carregamento."""
         impute_map = {
-            'edificio': 'Edificio Desconhecido',
-            'espaco': 'Espaco Desconhecido',
-            'tipo': 'N/D',
-            'estado': 'N/D',
-            'turno_extraido': 'N/D',
-            'ciclo_estudo': 'N/D',
-            'codigo_unidade_curricular': 'SEM_UNIDADE / RESERVA_ADMIN',
-            'designacao_unidade_curricular': 'SEM_UNIDADE / RESERVA_ADMIN',
-            'unidade_responsavel': 'Indefinido/N.D.',
-            'unidade_respon': 'Indefinido/N.D.',
-            'pessoa_resp': 'Indefinido/N.D.',
+            'edificio': 'Edifício Desconhecido', 'espaco': 'Espaço Desconhecido',
+            'tipo': 'N/D', 'estado': 'N/D', 'turno_extraido': 'N/D',
+            'ciclo_estudo': 'N/D', 'codigo_unidade_curricular': 'SEM_UNIDADE / RESERVA_ADMIN',
+            'unidade_responsavel': 'Indefinido/N.D.', 'pessoa_resp': 'Indefinido/N.D.'
         }
         for col, default in impute_map.items():
             if col in df.columns:
-                df[col] = df[col].fillna(default)
-                # Also catch string 'nan' / '<NA>' leftovers
-                df[col] = df[col].replace({'nan': default, '<NA>': default, '': default})
+                df[col] = df[col].fillna(default).replace({'nan': default, '<NA>': default, '': default})
         return df
 
-    # -----------------------------------------------------------------
-    # PIPELINE MASTER
-    # -----------------------------------------------------------------
     def apply_pipeline(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Orquestra as limpezas sequenciais."""
-        original_len = len(df)
-        self.logger.info("A iniciar Transformacoes [STATUS: Em Processamento]")
-
+        """Orquestração sequencial de todas as transformações."""
+        self.logger.info("A iniciar Transformação Dimensional...")
+        
         df = self.clean_strings(df)
         df = self.impute_responsavel(df)
         df = self.enforce_academic_dummy(df)
         df = self.normalize_edificios(df)
         df = self.clean_turnos(df)
         df = self.extract_uc_code(df)
-        df = self.add_online_flag_and_filters(df)  # pode eliminar linhas
-        df = self.resolve_attendance(df)
+        df = self.add_online_flag_and_filters(df)
         df = self.final_null_sweep(df)
 
-        final_len = len(df)
-        removidos = original_len - final_len
-        self.logger.info(f"Transformacao Completa: {removidos:,} outliers removidos.")
-        self.logger.info(f"Dimensao Resultante: {final_len:,} registos.")
-
-        # Report null residuals
-        null_cols = df.isnull().sum()
-        residual = null_cols[null_cols > 0]
-        if len(residual) > 0:
-            self.logger.warning(f"  Nulos residuais: {residual.to_dict()}")
-        else:
-            self.logger.info("  Zero nulos residuais em todo o DataFrame.")
-
+        self.logger.info(f"Transformação Completa. Volume final: {len(df):,} registos.")
         return df

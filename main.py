@@ -96,7 +96,7 @@ def main():
     # 3. Dimensões Dinâmicas (SCD Tipo 1)
     logger.info("[STEP 3] Sincronizando Dimensões Dinâmicas...")
     dimensions = [
-        ("Dim_Espaco",                ['Edificio', 'Nome_Espaco', 'Unidade_Responsavel', 'is_online'], 'SK_Espaco'),
+        ("Dim_Espaco",                ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Unidade_Responsavel', 'is_online'], 'SK_Espaco'),
         ("Dim_Unidade_Curricular",    ['Codigo_UC', 'Designacao_UC', 'Ciclo_Estudo'],                 'SK_Unidade_Curricular'),
         ("Dim_Curso",                 ['Codigo_Curso', 'Nome_Curso'],                                 'SK_Curso'),
         ("Dim_Responsavel",           ['Nome_Responsavel'],                                            'SK_Responsavel'),

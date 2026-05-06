@@ -158,6 +158,42 @@ class DataTransformer:
         return df
 
     # =================================================================
+    # 7b. CLASSIFICAÇÃO DE ESPAÇO E OVERRIDE ONLINE
+    # =================================================================
+    def _classify_espaco(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Deriva Categoria_Espaco a partir de Nome_Espaco e aplica override
+        quando is_online == 1 (True).
+        """
+        esp_col = next((c for c in ['espaco', 'nome_espaco'] if c in df.columns), None)
+        if esp_col:
+            nome_upper = df[esp_col].astype(str).str.upper()
+
+            # Regras de classificação por ordem de prioridade
+            conditions = [
+                nome_upper.str.contains('LAB', na=False) | nome_upper.str.match(r'^L', na=False),
+                nome_upper.str.contains('ANFITEATRO', na=False),
+                nome_upper.str.contains('AUDITORIO|AUDIT\u00d3RIO', na=False),
+                nome_upper.str.contains('GAB', na=False),
+            ]
+            choices = ['Laboratorio', 'Anfiteatro', 'Auditorio', 'Gabinete']
+            df['categoria_espaco'] = np.select(conditions, choices, default='Sala')
+        else:
+            df['categoria_espaco'] = 'Sala'
+
+        # Override para sessões online (RF05)
+        if 'is_online' in df.columns:
+            mask_online = df['is_online'].astype(int) == 1
+            edf_col = next((c for c in ['edificio', 'desig_edf'] if c in df.columns), None)
+            if edf_col:
+                df.loc[mask_online, edf_col] = 'ENSINO A DISTANCIA'
+            if esp_col:
+                df.loc[mask_online, esp_col] = 'ONLINE'
+            df.loc[mask_online, 'categoria_espaco'] = 'Online'
+
+        return df
+
+    # =================================================================
     # 8. CHAVES TEMPORAIS (SK_Data, SK_Hora_Inicio, SK_Hora_Fim)
     # =================================================================
     def _generate_temporal_keys(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -373,6 +409,7 @@ class DataTransformer:
             'flag_evento_agregado': 'Flag_Evento_Agregado',
             'presencas': 'Numero_Presencas',
             'is_online': 'is_online',
+            'categoria_espaco': 'Categoria_Espaco',
         }
         # Codigo_UC e Designacao_UC
         if 'codigo_unidade_curricular' in df.columns:
@@ -414,6 +451,9 @@ class DataTransformer:
 
         # 3. Regras de Negócio (Online, Duração, Outliers)
         df_main = self._apply_business_filters(df_main)
+
+        # 3b. Classificação de Espaço (Categoria + Override Online)
+        df_main = self._classify_espaco(df_main)
 
         # 4. Integração do Dicionário de Cursos
         if df_cursos is not None:

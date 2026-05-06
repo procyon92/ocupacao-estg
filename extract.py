@@ -1,81 +1,88 @@
 import pandas as pd
 import logging
 import csv
-import re
 from pathlib import Path
 from typing import Optional
 from io import StringIO
 
+
 class DataExtractor:
     """
-    Responsável pela ingestão de dados de fontes heterogéneas (CSV e SQL Dumps).
-    Implementa a primeira camada de limpeza (Sanitização) e normalização de esquema.
+    Responsável estritamente pela ingestão de dados de fontes heterogéneas.
+    Garante que os dados chegam à Staging Area com colunas normalizadas em
+    snake_case e sem qualquer transformação de negócio.
     """
 
     def __init__(self, base_path: str = "Dados"):
-        """
-        Inicializa o Extractor definindo o diretório base para as fontes de dados.
-        """
         self.base_path = Path(base_path)
         self.logger = logging.getLogger(__name__)
 
-    def _normalize_columns(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Padroniza os nomes das colunas para snake_case e remove caracteres especiais.
-        Garante consistência para as fases de transformação e merge.
-        """
+    # -----------------------------------------------------------------
+    # NORMALIZAÇÃO DE COLUNAS (snake_case)
+    # -----------------------------------------------------------------
+    @staticmethod
+    def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+        """Normaliza todos os nomes de colunas para snake_case."""
         df.columns = (
-            df.columns.str.strip()
+            df.columns
+            .str.strip()
             .str.lower()
-            .str.replace(" ", "_", regex=False)
-            .str.replace("(", "", regex=False)
-            .str.replace(")", "", regex=False)
-            .str.replace(".", "", regex=False)
+            .str.replace(r'[,]+$', '', regex=True)   # Remove trailing commas (e.g. "semestre,,")
+            .str.replace(r'\s+', '_', regex=True)
+            .str.replace(r'[^\w]', '_', regex=True)
+            .str.strip('_')
         )
         return df
 
-    def _sanitize_strings(self, df: pd.DataFrame) -> pd.DataFrame:
+    @staticmethod
+    def _sanitize_strings(df: pd.DataFrame) -> pd.DataFrame:
         """
-        Realiza a limpeza de strings em todo o DataFrame.
-        Trata especificamente o 'Float Poisoning' e resíduos de formatação SQL (\r, \n).
+        Sanitização universal de strings após extração.
+        Remove \r (carriage return) e caracteres ? espúrios de todas as colunas texto.
         """
         for col in df.select_dtypes(include=['object']).columns:
-            # Remoção de carriage returns e espaços em branco nas extremidades
-            df[col] = df[col].astype(str).str.replace('\r', '', regex=False).str.strip()
-            
-            # Reconversão de strings 'nan' para objetos nulos reais (pandas NA)
-            df[col] = df[col].replace('nan', pd.NA)
+            df[col] = (
+                df[col]
+                .str.replace('\r', '', regex=False)      # Bug 4: Remove CR literal
+                .str.replace('\\r', '', regex=False)     # Bug 4: Remove escaped \r from SQL dumps
+                .str.replace(r'^\?+', '', regex=True)     # Bug 5: Remove leading ? (encoding artefact)
+                .str.strip()
+            )
         return df
 
+    # -----------------------------------------------------------------
+    # CSV GENÉRICO
+    # -----------------------------------------------------------------
     def extract_csv(self, filename: str, sep: str = ",", encoding: str = "cp1252") -> Optional[pd.DataFrame]:
         """
-        Extrai dados de ficheiros CSV, aplicando normalização de colunas e limpeza de strings.
+        Extrai dados brutos de ficheiros CSV.
+        - Carrega tudo como string (dtype=str) para evitar inferências erradas.
+        - Normaliza nomes de colunas para snake_case.
         """
         file_path = self.base_path / filename
         if not file_path.exists():
-            self.logger.error(f"Ficheiro {filename} não encontrado em: {self.base_path.absolute()}")
+            self.logger.error(f"Ficheiro {filename} não encontrado em {self.base_path}.")
             return None
 
         try:
-            self.logger.info(f"A iniciar extração de CSV: {filename}")
-            # low_memory=False garante a correta inferência de tipos em datasets grandes
-            df = pd.read_csv(file_path, sep=sep, encoding=encoding, low_memory=False)
-            
-            self.logger.info(f"[{filename}] Sucesso: {df.shape[0]:,} linhas detetadas.")
-            
+            self.logger.info(f"A extrair dados brutos (Raw) de: {filename}")
+            df = pd.read_csv(file_path, sep=sep, encoding=encoding, low_memory=False, dtype=str)
             df = self._normalize_columns(df)
             df = self._sanitize_strings(df)
-            
+            self.logger.info(f"[{filename}] Extração concluída: {df.shape[0]:,} linhas | Colunas: {list(df.columns)}")
             return df
-            
+
         except Exception as e:
             self.logger.error(f"Erro na extração de {filename}: {e}")
             return None
 
+    # -----------------------------------------------------------------
+    # SQL DUMP (Staging para enriquecimento de responsáveis)
+    # -----------------------------------------------------------------
     def extract_sql_staging(self, filename: str) -> Optional[pd.DataFrame]:
         """
-        Extrai dados diretamente de um ficheiro de dump SQL (.sql).
-        Utiliza um parser customizado para extrair blocos 'INSERT INTO' sem necessidade de DB intermédia.
+        Realiza o parsing manual de ficheiros .sql para extrair registos brutos.
+        Nota: Colunas já são devolvidas em snake_case.
         """
         file_path = self.base_path / filename
         if not file_path.exists():
@@ -83,60 +90,65 @@ class DataExtractor:
             return None
 
         try:
-            self.logger.info(f"A processar dump SQL: {filename} (Parsing manual de INSERTs)")
-            
+            self.logger.info(f"A processar dump SQL: {filename}")
+
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
 
             data = []
-            # Definição do esquema esperado conforme o dump fornecido pela ESTG
+            # Esquema original conforme o dump (conforme identificado na Tarefa 1)
             columns = [
-                'id', 'desig_edf', 'espaco', 'datainicio', 'datafim', 'unidade_respon', 
+                'id', 'desig_edf', 'espaco', 'datainicio', 'datafim', 'unidade_respon',
                 'tipo', 'cod_disc', 'nome_disci', 'ciclo', 'descricao', 'estado', 'pessoa_resp'
             ]
-            
-            # Segmentação do ficheiro por comandos de inserção
+
             blocks = content.split('INSERT INTO `turnos`')
-            
-            for block in blocks[1:]: # Omitir o primeiro bloco (CREATE TABLE / Header)
+
+            for block in blocks[1:]:
                 val_idx = block.find('VALUES')
                 if val_idx != -1:
-                    # Extração da string contendo os tuplos de dados
                     tuples_str = block[val_idx+6:].strip().rstrip(';')
-                    
-                    # Split por '),(' para isolar cada registo, tratando a pontuação SQL
                     rows = tuples_str.split('),')
                     for row in rows:
-                        row = row.strip()
-                        if row.startswith('('): row = row[1:]
-                        if row.endswith(')'): row = row[:-1]
-                        
-                        # Utilização do módulo csv para processar vírgulas dentro de strings quotes
+                        row = row.strip().strip('()')
+
                         reader = csv.reader(
-                            StringIO(row), 
-                            quotechar="'", 
-                            delimiter=',', 
+                            StringIO(row),
+                            quotechar="'",
+                            delimiter=',',
                             skipinitialspace=True
                         )
-                        
+
                         for parsed_row in reader:
-                            # Tratamento de escape characters específicos de dumps SQL (MySQL style)
+                            # Correções de escape + remoção de \r literal (Bug 4)
                             clean_row = [
-                                str(x).replace("\\'", "'").replace("\\r", "").replace("\\n", " ") 
+                                str(x).replace("\\'", "'").replace('\\r', '').replace('\r', '').strip()
                                 for x in parsed_row
                             ]
                             data.append(clean_row)
-            
-            df_stg = pd.DataFrame(data, columns=columns)
-            
-            self.logger.info(f"[{filename}] Sucesso no parsing: {df_stg.shape[0]:,} linhas extraídas.")
-            
-            # Aplicação de limpeza padrão
-            df_stg = self._normalize_columns(df_stg)
-            df_stg = self._sanitize_strings(df_stg)
-            
-            return df_stg
+
+            df = pd.DataFrame(data, columns=columns)
+            df = self._sanitize_strings(df)
+            self.logger.info(f"[SQL Staging] Parsing concluído: {len(df):,} registos.")
+            return df
 
         except Exception as e:
-            self.logger.error(f"Falha no processamento do ficheiro SQL {filename}: {e}")
+            self.logger.error(f"Falha no parsing do SQL {filename}: {e}")
             return None
+
+    # -----------------------------------------------------------------
+    # DICIONÁRIO DE CURSOS (Reference Data)
+    # -----------------------------------------------------------------
+    def extract_courses(self, filename: str = "curso_ucs(in).csv") -> Optional[pd.DataFrame]:
+        """
+        Extrai a listagem mestre de cursos/UCs.
+        Ficheiro utiliza separador ';' e encoding latin-1.
+        """
+        self.logger.info(f"A iniciar extração da tabela mestre de cursos: {filename}")
+        df_courses = self.extract_csv(filename, sep=";", encoding="latin-1")
+
+        if df_courses is not None:
+            self.logger.info(f"Cursos extraídos com sucesso. Colunas detetadas: {list(df_courses.columns)}")
+            return df_courses
+
+        return None

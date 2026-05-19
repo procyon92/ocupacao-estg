@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import streamlit as st
 from config import APP_TITLE, PAGE_TITLE, FAVICON, COLORS
 from auth import check_auth, login_page, logout
-from data import get_anos_letivos, get_semestres, get_edificios, get_espacos, get_departamentos
+from data import get_anos_letivos, get_semestres, get_edificios, get_espacos, get_departamentos, get_ciclos_estudo, get_epocas, get_ciclos_estudo, get_epocas
 from pages import page_dashboard, page_ocupacao, page_espacos, page_relatorios, page_etl_logs
 
 # ─── Configuração da Página ──────────────────────────────────────────
@@ -73,6 +73,7 @@ st.markdown("""
     #MainMenu {visibility: hidden;}
     header {visibility: hidden;}
     footer {visibility: hidden;}
+    [data-testid="collapsedControl"] {display: none;}
 
     /* ── Metric Cards (KPIs) ────────────────────────────────────── */
     [data-testid="stMetric"] {
@@ -241,7 +242,7 @@ with header_cols[3]:
 
 # Filtros secundários (expandíveis)
 with st.expander("🔍 Filtros Avançados", expanded=False):
-    fc1, fc2, fc3 = st.columns(3)
+    fc1, fc2, fc3, fc4 = st.columns(4)
     with fc1:
         semestre_opt = st.selectbox("Semestre", ["Todos", 1, 2], key="filter_semestre")
     with fc2:
@@ -252,6 +253,31 @@ with st.expander("🔍 Filtros Avançados", expanded=False):
             key="filter_dept",
         )
     with fc3:
+        ciclos = get_ciclos_estudo()
+        ciclo_selecionado = st.selectbox(
+            "Ciclo Estudo",
+            ["Todos"] + ciclos,
+            key="filter_ciclo",
+        )
+    with fc4:
+        epocas = get_epocas()
+        epoca_selecionada = st.selectbox(
+            "Época",
+            ["Todos"] + epocas,
+            key="filter_epoca",
+        )
+
+    fc5, fc6, fc7 = st.columns(3)
+    with fc5:
+        hide_online = st.checkbox("Excluir Sessões Online", key="toggle_online", value=False)
+    with fc6:
+        dedup_concurrent = st.checkbox("Deduplicar Concurrentes", key="toggle_dedup", value=False)
+    with fc7:
+        hide_ghost = st.checkbox("Ocultar Ghost Sessions", key="toggle_ghost", value=False)
+
+    st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
+    fc8, fc9 = st.columns(2)
+    with fc8:
         date_range = st.date_input(
             "Período",
             value=[],
@@ -270,6 +296,13 @@ if espaco_selecionado != "Todos os espaços":
     filters["espaco"] = espaco_selecionado
 if dept_selecionado != "Todos":
     filters["departamento"] = dept_selecionado
+if ciclo_selecionado != "Todos":
+    filters["ciclo_estudo"] = ciclo_selecionado
+if epoca_selecionada != "Todos":
+    filters["epoca"] = epoca_selecionada
+filters["hide_online"] = hide_online
+filters["deduplicate_concurrent"] = dedup_concurrent
+filters["hide_ghost_sessions"] = hide_ghost
 if date_range and len(date_range) == 2:
     filters["data_inicio"] = str(date_range[0])
     filters["data_fim"] = str(date_range[1])

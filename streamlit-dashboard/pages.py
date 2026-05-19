@@ -94,9 +94,16 @@ def page_dashboard(filters: dict):
     total_ocupacoes = len(df)
     espacos_ativos = df["Nome_Espaco"].nunique() if not df.empty else 0
 
-    # Taxa de ocupação: proporção de espaços utilizados vs total disponível
-    # (simplificação: espaços com dados / espaços no edifício filtrado)
-    taxa_ocupacao = min(round((espacos_ativos / max(espacos_ativos + 5, 1)) * 100), 100) if espacos_ativos > 0 else 0
+    # Taxa de ocupação: rácio real de alocação
+    # (minutos usados) / (espaços x dias letivos x 480 min/dia)
+    if not df.empty:
+        total_min = df["Duracao_Minutos"].sum()
+        espacos = df["Nome_Espaco"].nunique()
+        dias = df["DataCompleta"].nunique()
+        capacidade_disponivel = espacos * dias * 480
+        taxa_ocupacao = min(round((total_min / max(capacidade_disponivel, 1)) * 100), 100) if capacidade_disponivel > 0 else 0
+    else:
+        taxa_ocupacao = 0
 
     # Tempo médio
     if not df.empty and "Duracao_Minutos" in df.columns:
@@ -396,7 +403,7 @@ def page_etl_logs(filters: dict):
         sk_cols = {
             "Edifício": "Edificio",
             "UC": "Designacao_UC",
-            "Responsável": "Nome_Responsavel",
+            "Responsável": "Docente_Responsavel",
             "Estado": "Estado",
             "Turno": "Designacao_Turno",
         }

@@ -9,21 +9,19 @@ from config import DB_CONFIG
 
 
 def _get_connection():
-    """Cria conexão PyMySQL."""
     return pymysql.connect(**DB_CONFIG)
 
 
 @st.cache_data(ttl=300)
 def get_anos_letivos() -> list:
-    """Retorna lista de anos letivos com dados na Facto."""
     conn = _get_connection()
     try:
         query = """
-            SELECT DISTINCT d.Ano_Letivo
+            SELECT DISTINCT d.Ano_Escolar AS Ano_Letivo
             FROM Facto_Ocupacao f
             JOIN Dim_Data d ON f.SK_Data = d.SK_Data
-            WHERE d.Ano_Letivo != 'N/D'
-            ORDER BY d.Ano_Letivo DESC
+            WHERE d.Ano_Escolar != 'N/D'
+            ORDER BY d.Ano_Escolar DESC
         """
         df = pd.read_sql(query, conn)
         return df["Ano_Letivo"].tolist()
@@ -33,13 +31,11 @@ def get_anos_letivos() -> list:
 
 @st.cache_data(ttl=300)
 def get_semestres() -> list:
-    """Retorna lista de semestres disponíveis (1, 2)."""
     return [1, 2]
 
 
 @st.cache_data(ttl=300)
 def get_edificios() -> list:
-    """Retorna lista de edifícios distintos com dados."""
     conn = _get_connection()
     try:
         query = """
@@ -57,7 +53,6 @@ def get_edificios() -> list:
 
 @st.cache_data(ttl=300)
 def get_espacos(edificio: str = None) -> list:
-    """Retorna lista de espaços, opcionalmente filtrados por edifício."""
     conn = _get_connection()
     try:
         query = """
@@ -79,17 +74,84 @@ def get_espacos(edificio: str = None) -> list:
 
 @st.cache_data(ttl=300)
 def get_departamentos() -> list:
-    """Retorna lista de departamentos/unidades responsáveis."""
     conn = _get_connection()
     try:
         query = """
-            SELECT DISTINCT e.Unidade_Responsavel
+            SELECT DISTINCT e.Escola_Responsavel AS Departamento
             FROM Dim_Espaco e
-            WHERE e.Unidade_Responsavel NOT IN ('N/D', 'Indefinido/N.D.')
-            ORDER BY e.Unidade_Responsavel
+            WHERE e.Escola_Responsavel NOT IN ('N/D', 'Indefinido/N.D.')
+            ORDER BY e.Escola_Responsavel
         """
         df = pd.read_sql(query, conn)
-        return df["Unidade_Responsavel"].tolist()
+        return df["Departamento"].tolist()
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_ciclos_estudo() -> list:
+    conn = _get_connection()
+    try:
+        query = """
+            SELECT DISTINCT uc.Ciclo_Estudo
+            FROM Facto_Ocupacao f
+            JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular
+            WHERE uc.Ciclo_Estudo != 'N/D'
+            ORDER BY uc.Ciclo_Estudo
+        """
+        df = pd.read_sql(query, conn)
+        return df["Ciclo_Estudo"].tolist()
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_epocas() -> list:
+    conn = _get_connection()
+    try:
+        query = """
+            SELECT DISTINCT ep.Descricao_Epoca
+            FROM Facto_Ocupacao f
+            JOIN Dim_Epoca ep ON f.SK_Epoca = ep.SK_Epoca
+            WHERE ep.Descricao_Epoca != 'N/D'
+            ORDER BY ep.Descricao_Epoca
+        """
+        df = pd.read_sql(query, conn)
+        return df["Descricao_Epoca"].tolist()
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_ciclos_estudo() -> list:
+    conn = _get_connection()
+    try:
+        query = """
+            SELECT DISTINCT uc.Ciclo_Estudo
+            FROM Facto_Ocupacao f
+            JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular
+            WHERE uc.Ciclo_Estudo != 'N/D'
+            ORDER BY uc.Ciclo_Estudo
+        """
+        df = pd.read_sql(query, conn)
+        return df["Ciclo_Estudo"].tolist()
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_epocas() -> list:
+    conn = _get_connection()
+    try:
+        query = """
+            SELECT DISTINCT ep.Descricao_Epoca
+            FROM Facto_Ocupacao f
+            JOIN Dim_Epoca ep ON f.SK_Epoca = ep.SK_Epoca
+            WHERE ep.Descricao_Epoca != 'N/D'
+            ORDER BY ep.Descricao_Epoca
+        """
+        df = pd.read_sql(query, conn)
+        return df["Descricao_Epoca"].tolist()
     finally:
         conn.close()
 
@@ -103,11 +165,12 @@ def get_filtered_data(
     departamento: str = None,
     data_inicio: str = None,
     data_fim: str = None,
+    epoca: str = None,
+    ciclo_estudo: str = None,
+    hide_online: bool = False,
+    deduplicate_concurrent: bool = False,
+    hide_ghost_sessions: bool = False,
 ) -> pd.DataFrame:
-    """
-    Query principal: retorna dados da Facto cruzados com todas as dimensões,
-    aplicando os filtros do dashboard.
-    """
     conn = _get_connection()
     try:
         query = """
@@ -118,14 +181,14 @@ def get_filtered_data(
                 f.Flag_Evento_Agregado,
                 d.DataCompleta,
                 d.Ano,
-                d.Ano_Letivo,
+                d.Ano_Escolar,
                 d.Mes,
                 d.Dia,
                 d.DiaSemana,
                 d.Semestre,
                 d.Numero_Semana,
-                d.Epoca_Exame,
                 d.Tipo_Dia,
+                ep.Descricao_Epoca,
                 h1.Hora AS Hora_Inicio,
                 h1.Minuto AS Minuto_Inicio,
                 h2.Hora AS Hora_Fim,
@@ -133,12 +196,12 @@ def get_filtered_data(
                 e.Edificio,
                 e.Nome_Espaco,
                 e.Categoria_Espaco,
-                e.Unidade_Responsavel,
+                e.Escola_Responsavel,
                 e.is_online,
                 uc.Codigo_UC,
                 uc.Designacao_UC,
                 uc.Ciclo_Estudo,
-                r.Nome_Responsavel,
+                r.Docente_Responsavel,
                 ta.Designacao_Atividade,
                 ea.Estado,
                 t.Designacao_Turno
@@ -152,12 +215,13 @@ def get_filtered_data(
             JOIN Dim_Tipo_Atividade ta ON f.SK_Tipo_Atividade = ta.SK_Tipo_Atividade
             JOIN Dim_Estado_Agendamento ea ON f.SK_Estado_Agendamento = ea.SK_Estado_Agendamento
             JOIN Dim_Turno t ON f.SK_Turno = t.SK_Turno
+            JOIN Dim_Epoca ep ON f.SK_Epoca = ep.SK_Epoca
             WHERE 1=1
         """
         params = []
 
         if ano_letivo:
-            query += " AND d.Ano_Letivo = %s"
+            query += " AND d.Ano_Escolar = %s"
             params.append(ano_letivo)
         if semestre is not None:
             query += " AND d.Semestre = %s"
@@ -169,7 +233,7 @@ def get_filtered_data(
             query += " AND e.Nome_Espaco = %s"
             params.append(espaco)
         if departamento:
-            query += " AND e.Unidade_Responsavel = %s"
+            query += " AND e.Escola_Responsavel = %s"
             params.append(departamento)
         if data_inicio:
             query += " AND d.DataCompleta >= %s"
@@ -177,10 +241,24 @@ def get_filtered_data(
         if data_fim:
             query += " AND d.DataCompleta <= %s"
             params.append(data_fim)
+        if epoca:
+            query += " AND ep.Descricao_Epoca = %s"
+            params.append(epoca)
+        if ciclo_estudo:
+            query += " AND uc.Ciclo_Estudo = %s"
+            params.append(ciclo_estudo)
 
         df = pd.read_sql(query, conn, params=params)
         if "DataCompleta" in df.columns:
             df["DataCompleta"] = pd.to_datetime(df["DataCompleta"])
+
+        if hide_online and "is_online" in df.columns:
+            df = df[df["is_online"] != 1]
+        if deduplicate_concurrent and "Flag_Evento_Agregado" in df.columns:
+            df = df[df["Flag_Evento_Agregado"] != 1]
+        if hide_ghost_sessions and "Numero_Presencas" in df.columns:
+            df = df[df["Numero_Presencas"] > 0]
+
         return df
     finally:
         conn.close()
@@ -188,18 +266,25 @@ def get_filtered_data(
 
 @st.cache_data(ttl=300)
 def get_etl_quality_metrics() -> dict:
-    """Retorna métricas de qualidade do ETL (contagens, erros)."""
     conn = _get_connection()
     try:
         cursor = conn.cursor()
         cursor.execute("SELECT COUNT(*) FROM Facto_Ocupacao")
         total = cursor.fetchone()[0]
 
-        # Registos com SK=0 (dados ausentes) contam como "problemas"
         cursor.execute("""
-            SELECT COUNT(*) FROM Facto_Ocupacao
-            WHERE SK_Espaco = 0 OR SK_Unidade_Curricular = 0
-                  OR SK_Responsavel = 0 OR SK_Data = 0
+            SELECT COUNT(*) FROM Facto_Ocupacao f
+            LEFT JOIN Dim_Espaco e ON f.SK_Espaco = e.SK_Espaco
+            LEFT JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular
+            LEFT JOIN Dim_Curso c ON f.SK_Curso = c.SK_Curso
+            LEFT JOIN Dim_Responsavel r ON f.SK_Responsavel = r.SK_Responsavel
+            WHERE e.Edificio = 'N/D'
+               OR e.Nome_Espaco = 'N/D'
+               OR uc.Designacao_UC IN ('N/D', 'SEM_UNIDADE / RESERVA_ADMIN')
+               OR uc.Ciclo_Estudo = 'N/D'
+               OR c.Nome_Curso = 'N/D'
+               OR c.Codigo_Curso = 'N/D'
+               OR r.Docente_Responsavel IN ('N/D', 'Indefinido/N.D.')
         """)
         with_defaults = cursor.fetchone()[0]
 
@@ -220,7 +305,6 @@ def get_ocupacao_por_hora(
     semestre: int = None,
     departamento: str = None,
 ) -> pd.DataFrame:
-    """Retorna heatmap data: ocupações por hora e dia da semana."""
     conn = _get_connection()
     try:
         query = """
@@ -236,13 +320,13 @@ def get_ocupacao_por_hora(
         """
         params = []
         if ano_letivo:
-            query += " AND d.Ano_Letivo = %s"
+            query += " AND d.Ano_Escolar = %s"
             params.append(ano_letivo)
         if semestre is not None:
             query += " AND d.Semestre = %s"
             params.append(semestre)
         if departamento:
-            query += " AND e.Unidade_Responsavel = %s"
+            query += " AND e.Escola_Responsavel = %s"
             params.append(departamento)
 
         query += " GROUP BY d.DiaSemana, h.Hora ORDER BY h.Hora"

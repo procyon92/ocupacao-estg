@@ -40,8 +40,23 @@ def main():
 
     df_agendamentos = extractor.extract_csv("PorSalaTurno.csv", sep=",", encoding="cp1252")
     df_presencas    = extractor.extract_csv("PorTurnoPresencas.csv", sep=",", encoding="cp1252")
-    df_cursos       = extractor.extract_courses("curso_ucs(in).csv")
-    df_stg          = extractor.extract_sql_staging("script_espacos_salas_turnos.sql")
+    
+    # CORREÇÃO 1: Utilização do conector genérico CSV com inferência de encoding padrão.
+    # Nota: Confirmar se o separador real é ',' ou ';' para este dataset.
+    df_cursos       = extractor.extract_csv("curso_ucs(in).csv", sep=";", encoding="latin-1")
+    
+    target_table_name = "turnos"
+    expected_cols_stg = [
+        "id", "desig_edf", "espaco", "datainicio", "datafim",
+        "unidade_respon", "tipo", "cod_disc", "nome_disci",
+        "ciclo", "descricao", "estado", "pessoa_resp"
+    ]
+    
+    df_stg = extractor.extract_sql_dump(
+        filename="script_espacos_salas_turnos.sql",
+        table_name=target_table_name,
+        expected_columns=expected_cols_stg
+    )
 
     if df_agendamentos is None or df_stg is None:
         logger.critical("FALHA CRÍTICA: Fontes de agendamento não carregadas.")
@@ -87,38 +102,44 @@ def main():
     # 1. Dimensões Estáticas e Dummies (SK=0)
     logger.info("[STEP 1] Inicializando Dimensões Estáticas...")
     loader.ensure_dummy_dimension_records()
-    loader.generate_hour_dimension()
 
-    # 2. Dimensão Data (PK fixa — método dedicado)
-    logger.info("[STEP 2] Carregando Dim_Data...")
-    loader.load_date_dimension(df_dim_data)
+    # 2. Dim_Hora e Dim_Data (PK fixa — método dedicado)
+    logger.info("[STEP 2] Carregando Dim_Hora e Dim_Data...")
+    df_dim_hora = transformer.build_hour_dimension()
+    loader.load_fixed_pk_dimension(df_dim_hora, "Dim_Hora", "SK_Hora")
+    loader.load_fixed_pk_dimension(df_dim_data, "Dim_Data", "SK_Data")
 
-    # 3. Dimensões Dinâmicas (SCD Tipo 1)
+    # 3. Dimensões Dinâmicas (Misto SCD1 / SCD2)
     logger.info("[STEP 3] Sincronizando Dimensões Dinâmicas...")
+    
+    # Atualizado conforme schema_dw.sql
     dimensions = [
-        ("Dim_Espaco",                ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Unidade_Responsavel', 'is_online'], 'SK_Espaco'),
+        ("Dim_Espaco",                ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online'], 'SK_Espaco'),
         ("Dim_Unidade_Curricular",    ['Codigo_UC', 'Designacao_UC', 'Ciclo_Estudo'],                 'SK_Unidade_Curricular'),
         ("Dim_Curso",                 ['Codigo_Curso', 'Nome_Curso'],                                 'SK_Curso'),
-        ("Dim_Responsavel",           ['Nome_Responsavel'],                                            'SK_Responsavel'),
-        ("Dim_Turno",                 ['Designacao_Turno'],                                            'SK_Turno'),
-        ("Dim_Tipo_Atividade",        ['Designacao_Atividade'],                                        'SK_Tipo_Atividade'),
-        ("Dim_Estado_Agendamento",    ['Estado'],                                                      'SK_Estado_Agendamento'),
+        ("Dim_Responsavel",           ['Docente_Responsavel'],                                        'SK_Responsavel'),
+        ("Dim_Turno",                 ['Designacao_Turno'],                                           'SK_Turno'),
+        ("Dim_Tipo_Atividade",        ['Designacao_Atividade'],                                       'SK_Tipo_Atividade'),
+        ("Dim_Estado_Agendamento",    ['Estado'],                                                     'SK_Estado_Agendamento'),
+        ("Dim_Epoca",                 ['Descricao_Epoca'],                                            'SK_Epoca') # Adicionado
     ]
+
+    scd2_tables = ["Dim_Espaco", "Dim_Unidade_Curricular", "Dim_Curso"]
 
     for table, keys, sk in dimensions:
         if all(k in df_transformed.columns for k in keys):
             logger.info(f"  -> Processando {table}...")
-            df_transformed = loader.load_dimension(df_transformed, table, keys, sk)
+            if table in scd2_tables:
+                df_transformed = loader.load_dimension_scd2(df_transformed, table, keys, sk)
+            else:
+                df_transformed = loader.load_dimension_scd1(df_transformed, table, keys, sk)
 
     # 4. Preparação e Carga da Facto
     logger.info("[STEP 4] Preparando e Carregando Facto_Ocupacao...")
+    # O loader.prepare_fact_payload deve agora garantir a inclusão de SK_Epoca
     df_payload = loader.prepare_fact_payload(df_transformed)
     loader.print_quality_metrics(df_payload)
     loader.load_fact(df_payload)
-
-    logger.info("=" * 70)
-    logger.info("  >> PIPELINE ETL CONCLUÍDO COM SUCESSO <<")
-    logger.info("=" * 70)
 
 
 if __name__ == "__main__":

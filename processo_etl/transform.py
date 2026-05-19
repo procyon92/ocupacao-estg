@@ -3,21 +3,19 @@ import logging
 import re
 import numpy as np
 
-
 class DataTransformer:
     """
     Camada de Transformação do Pipeline ETL.
-    Implementa as regras de higienização, normalização e imputação
-    definidas no mapa_logico_dados.xlsx e no relatorio_projeto_ESTG.pdf.
+    Implementa as regras de higienização, normalização e imputação.
+    Refatorado para alinhamento estrito com schema_dw.sql e separação de responsabilidades.
     """
     def __init__(self):
         self.logger = logging.getLogger(__name__)
 
     # =================================================================
-    # 1. DIMENSÃO DATA (Geração Autónoma)
+    # 1. GERAÇÃO AUTÓNOMA DE DIMENSÕES ESTÁTICAS
     # =================================================================
     def build_date_dimension(self, start_date='2018-01-01', end_date='2035-12-31') -> pd.DataFrame:
-        """Gera o DataFrame completo para a Dim_Data com todos os atributos do schema."""
         self.logger.info(f"A gerar Dim_Data ({start_date} a {end_date})...")
         date_range = pd.date_range(start=start_date, end=end_date)
         df = pd.DataFrame({'DataCompleta': date_range})
@@ -29,30 +27,18 @@ class DataTransformer:
         df['Dia'] = pd.to_datetime(df['DataCompleta']).dt.day
         df['Numero_Semana'] = pd.to_datetime(df['DataCompleta']).dt.isocalendar().week.astype(int)
 
-        # Ano letivo: começa em setembro
-        df['Ano_Letivo'] = df.apply(
+        df['Ano_Escolar'] = df.apply(
             lambda r: f"{r['Ano']}/{r['Ano']+1}" if r['Mes'] >= 9 else f"{r['Ano']-1}/{r['Ano']}", axis=1
         )
 
-        # Semestre: 1 (Set-Fev), 2 (Mar-Jul), 0 (Ago)
         df['Semestre'] = df['Mes'].apply(
             lambda m: 1 if m in [9,10,11,12,1,2] else (2 if m in [3,4,5,6,7] else 0)
         )
 
-        # Dia da Semana em Português
         day_map = {0:'Segunda-feira',1:'Terça-feira',2:'Quarta-feira',
                    3:'Quinta-feira',4:'Sexta-feira',5:'Sábado',6:'Domingo'}
         df['DiaSemana'] = pd.to_datetime(df['DataCompleta']).dt.dayofweek.map(day_map)
 
-        # Época de Exame
-        def get_epoca(m):
-            if m in [1,2]: return 'Época Normal/Recurso (Sem 1)'
-            if m in [6,7]: return 'Época Normal/Recurso (Sem 2)'
-            if m == 8: return 'Férias'
-            return 'Período Letivo'
-        df['Epoca_Exame'] = df['Mes'].apply(get_epoca)
-
-        # Tipo de Dia
         def get_tipo_dia(row):
             if row['DiaSemana'] in ['Sábado','Domingo']: return 'Fim de Semana'
             if row['Mes'] == 8: return 'Férias'
@@ -62,14 +48,17 @@ class DataTransformer:
         self.logger.info(f"Dim_Data gerada: {len(df):,} registos.")
         return df
 
+    def build_hour_dimension(self) -> pd.DataFrame:
+        self.logger.info("A fabricar a Dim_Hora (geração estática movida da camada Load)...")
+        rows = [{'SK_Hora': h*100+m, 'Hora': h, 'Minuto': m} for h in range(24) for m in range(60)]
+        return pd.DataFrame(rows)
+
     # =================================================================
     # 2. LIMPEZA DE STRINGS E PLACEHOLDERS
     # =================================================================
     def _clean_strings(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Normaliza casing e remove espaços redundantes em colunas texto."""
-        for col in df.select_dtypes(include=['object']).columns:
+        for col in df.select_dtypes(include=['object', 'string']).columns:
             df[col] = df[col].astype(str).str.strip()
-            # Uppercase para campos de localização conforme Mapa Lógico
             if col in ['edificio','desig_edf','espaco','nome_espaco','unidade_respon','unidade_responsavel']:
                 df[col] = df[col].str.upper()
             df[col] = df[col].replace({'nan': pd.NA, '<NA>': pd.NA, '': pd.NA, 'None': pd.NA})
@@ -79,7 +68,6 @@ class DataTransformer:
     # 3. IMPUTAÇÃO DE RESPONSÁVEIS
     # =================================================================
     def _impute_responsavel(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Preenche colunas de responsabilidade com valor padrão."""
         for col in ['pessoa_resp','unidade_respon','unidade_responsavel']:
             if col in df.columns:
                 df[col] = df[col].fillna('Indefinido/N.D.')
@@ -89,7 +77,6 @@ class DataTransformer:
     # 4. TRATAMENTO DE REGISTOS SEM UC (Reservas Administrativas)
     # =================================================================
     def _enforce_academic_dummy(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Preenche campos académicos vazios com placeholder para Dim_UC."""
         academic_cols = [
             'cod_disc','codigo_unidade_curricular',
             'nome_disci','designacao_unidade_curricular',
@@ -100,11 +87,21 @@ class DataTransformer:
                 df[col] = df[col].fillna('SEM_UNIDADE / RESERVA_ADMIN')
         return df
 
+    def _flag_reserva_sem_uc(self, df: pd.DataFrame) -> pd.DataFrame:
+        uc_col = next((c for c in ['cod_disc', 'codigo_unidade_curricular'] if c in df.columns), None)
+        tipo_col = 'tipo' if 'tipo' in df.columns else None
+        if uc_col and tipo_col:
+            mask = (df[tipo_col].astype(str).str.strip().str.upper() == 'RESERVA') & df[uc_col].isna()
+            count = mask.sum()
+            if count > 0:
+                self.logger.warning(f"[RESERVA_SEM_UC] {count:,} registos do tipo 'Reserva' sem codigo de UC imputados.")
+                df.loc[mask, uc_col] = 'SEM_UNIDADE / RESERVA_ADMIN'
+        return df
+
     # =================================================================
-    # 5. NORMALIZAÇÃO DE EDIFÍCIOS (Remoção de sufixos redundantes)
+    # 5. NORMALIZAÇÃO DE EDIFÍCIOS
     # =================================================================
     def _normalize_edificios(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Remove sufixos em parênteses de nomes de edifícios (e.g. 'EDIFÍCIO A (ESTG)' → 'EDIFÍCIO A')."""
         for col in ['edificio','desig_edf']:
             if col in df.columns:
                 df[col] = df[col].fillna('').astype(str).apply(
@@ -114,10 +111,9 @@ class DataTransformer:
         return df
 
     # =================================================================
-    # 6. EXTRAÇÃO DE TURNOS (Regex)
+    # 6. EXTRAÇÃO DE TURNOS
     # =================================================================
     def _extract_turno(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Extrai código de turno do campo de descrição."""
         desc_col = next((c for c in ['descricao_com_indicacao_turno','descricao'] if c in df.columns), None)
         if desc_col:
             df['turno_extraido'] = df[desc_col].astype(str).str.extract(
@@ -126,10 +122,9 @@ class DataTransformer:
         return df
 
     # =================================================================
-    # 7. FLAG ONLINE, DURAÇÃO, FILTROS DE OUTLIERS
+    # 7. FILTROS DE NEGÓCIO E CLASSIFICAÇÃO
     # =================================================================
     def _apply_business_filters(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Calcula is_online, duracao_minutos, filtra outliers (0 < dur ≤ 360)."""
         df['is_online'] = False
         online_re = 'Online|Ensino a Distância|Virtual|Zoom'
 
@@ -147,9 +142,12 @@ class DataTransformer:
             df[col_f] = pd.to_datetime(df[col_f], errors='coerce')
             df = df.dropna(subset=[col_i, col_f]).copy()
             df['duracao_minutos'] = (df[col_f] - df[col_i]).dt.total_seconds() / 60
-            # Filtro de outliers: duração > 0 e ≤ 360 minutos (6h)
+            pre = len(df)
             df = df[(df['duracao_minutos'] > 0) & (df['duracao_minutos'] <= 360)].copy()
-            # Flag de sobreposição
+            dropped = pre - len(df)
+            if dropped > 0:
+                self.logger.info(f"[OUTLIERS] {dropped:,} registos com durao > 6h ou <= 0 foram removidos.")
+
             esp_c = next((c for c in ['espaco','nome_espaco'] if c in df.columns), None)
             if esp_c:
                 df = df.sort_values(by=[col_i, esp_c])
@@ -157,19 +155,10 @@ class DataTransformer:
 
         return df
 
-    # =================================================================
-    # 7b. CLASSIFICAÇÃO DE ESPAÇO E OVERRIDE ONLINE
-    # =================================================================
     def _classify_espaco(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Deriva Categoria_Espaco a partir de Nome_Espaco e aplica override
-        quando is_online == 1 (True).
-        """
         esp_col = next((c for c in ['espaco', 'nome_espaco'] if c in df.columns), None)
         if esp_col:
             nome_upper = df[esp_col].astype(str).str.upper()
-
-            # Regras de classificação por ordem de prioridade
             conditions = [
                 nome_upper.str.contains('LAB', na=False) | nome_upper.str.match(r'^L', na=False),
                 nome_upper.str.contains('ANFITEATRO', na=False),
@@ -181,9 +170,8 @@ class DataTransformer:
         else:
             df['categoria_espaco'] = 'Sala'
 
-        # Override para sessões online (RF05)
         if 'is_online' in df.columns:
-            mask_online = df['is_online'].astype(int) == 1
+            mask_online = df['is_online'] == True
             edf_col = next((c for c in ['edificio', 'desig_edf'] if c in df.columns), None)
             if edf_col:
                 df.loc[mask_online, edf_col] = 'ENSINO A DISTANCIA'
@@ -193,11 +181,25 @@ class DataTransformer:
 
         return df
 
+    def _classify_epoca(self, df: pd.DataFrame) -> pd.DataFrame:
+        col_i = next((c for c in ['data_inicio', 'datainicio'] if c in df.columns), None)
+        if col_i:
+            mes = df[col_i].dt.month
+            conditions = [
+                mes.isin([1, 2]),
+                mes.isin([6, 7]),
+                mes == 8
+            ]
+            choices = ['Época Normal/Recurso (Sem 1)', 'Época Normal/Recurso (Sem 2)', 'Férias']
+            df['descricao_epoca'] = np.select(conditions, choices, default='Período Letivo')
+        else:
+            df['descricao_epoca'] = 'N/D'
+        return df
+
     # =================================================================
-    # 8. CHAVES TEMPORAIS (SK_Data, SK_Hora_Inicio, SK_Hora_Fim)
+    # 8. CHAVES TEMPORAIS E IDENTIFICADOR ÚNICO
     # =================================================================
     def _generate_temporal_keys(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Gera as Surrogate Keys temporais para ligação a Dim_Data e Dim_Hora."""
         col_i = next((c for c in ['data_inicio','datainicio'] if c in df.columns), None)
         col_f = next((c for c in ['data_fim','datafim'] if c in df.columns), None)
         if col_i and col_f:
@@ -206,11 +208,12 @@ class DataTransformer:
             df['SK_Hora_Fim'] = (df[col_f].dt.hour * 100 + df[col_f].dt.minute).astype(int)
         return df
 
-    # =================================================================
-    # 9. GERAÇÃO DE ID_OCUPACAO (PK da Facto)
-    # =================================================================
     def _generate_ocupacao_id(self, df: pd.DataFrame) -> pd.DataFrame:
-        """Gera a chave primária da tabela de factos a partir do identificador fonte."""
+        esp_col = next((c for c in ['espaco', 'nome_espaco'] if c in df.columns), None)
+        if esp_col not in df.columns:
+            df['espaco_tmp'] = 'UNK'
+            esp_col = 'espaco_tmp'
+
         if 'identificador' in df.columns:
             df['ID_Ocupacao'] = pd.to_numeric(df['identificador'], errors='coerce').fillna(0).astype(int).astype(str)
             mask_zero = df['ID_Ocupacao'] == '0'
@@ -218,28 +221,28 @@ class DataTransformer:
                 df.loc[mask_zero, 'ID_Ocupacao'] = (
                     df['SK_Data'].astype(str) + "_" +
                     df['SK_Hora_Inicio'].astype(str) + "_" +
-                    df['espaco'].astype(str).str[:5]
+                    df[esp_col].astype(str).str[:5]
                 )
         else:
             df['ID_Ocupacao'] = (
                 df['SK_Data'].astype(str) + "_" +
                 df['SK_Hora_Inicio'].astype(str) + "_" +
-                df.get('espaco', pd.Series(['UNK']*len(df))).astype(str).str[:5]
+                df[esp_col].astype(str).str[:5]
             )
+
+        if 'espaco_tmp' in df.columns:
+            df = df.drop(columns=['espaco_tmp'])
         return df
 
     # =================================================================
-    # 10. MERGE COM SQL STAGING (Enriquecimento de Responsáveis)
+    # 9. CRUZAMENTOS EXTERNOS (Staging SQL, Presenças, Cursos)
     # =================================================================
     def _merge_hybrid_stg(self, df_main: pd.DataFrame, df_stg: pd.DataFrame) -> pd.DataFrame:
-        """Cruza CSV transacional com dump SQL para preencher pessoa_resp e unidade_respon."""
-        self.logger.info("A iniciar Merge Híbrido com Metadados SQL...")
         df_stg_e = df_stg[['id','unidade_respon','pessoa_resp']].copy()
         df_main['identificador'] = pd.to_numeric(df_main['identificador'], errors='coerce')
         df_stg_e['id'] = pd.to_numeric(df_stg_e['id'], errors='coerce')
         df_stg_e = df_stg_e.drop_duplicates(subset=['id'], keep='first')
 
-        pre_len = len(df_main)
         df_m = pd.merge(df_main, df_stg_e, left_on='identificador', right_on='id', how='left', suffixes=('','_sql'))
 
         if 'unidade_respon_sql' in df_m.columns:
@@ -248,19 +251,11 @@ class DataTransformer:
             df_m['pessoa_resp'] = df_m['pessoa_resp_sql'].fillna(df_m.get('pessoa_resp'))
         df_m.drop(columns=['id','unidade_respon_sql','pessoa_resp_sql'], inplace=True, errors='ignore')
 
-        if len(df_m) != pre_len:
-            self.logger.warning(f"ALERTA: Merge STG alterou volumetria: {pre_len:,} -> {len(df_m):,}")
         return df_m
 
-    # =================================================================
-    # 11. MERGE DE PRESENÇAS (Chave Semântica)
-    # =================================================================
     def _merge_attendance(self, df_main: pd.DataFrame, df_pres_raw: pd.DataFrame) -> pd.DataFrame:
-        """Cruza agendamentos com presenças via chave semântica: Data + UC (UPPER) + Turno."""
-        self.logger.info("A processar Presenças via Chave Semântica...")
         df_p = df_pres_raw.copy()
 
-        # Preparar fonte de presenças
         if 'unidade_curricular' in df_p.columns:
             df_p['_mk_uc'] = df_p['unidade_curricular'].astype(str).apply(
                 lambda x: re.sub(r'\s*\([^)]*\)\s*$', '', x).strip()
@@ -270,14 +265,9 @@ class DataTransformer:
         if 'turno' in df_p.columns:
             df_p['_mk_turno'] = df_p['turno'].astype(str).str.strip()
 
-        # Garantir tipo numérico
         df_p['presencas'] = pd.to_numeric(df_p.get('presencas', 0), errors='coerce').fillna(0).astype(int)
+        pres_agg = df_p.groupby(['_mk_date','_mk_uc','_mk_turno'], dropna=False).agg({'presencas': 'sum'}).reset_index()
 
-        pres_agg = df_p.groupby(['_mk_date','_mk_uc','_mk_turno'], dropna=False).agg(
-            {'presencas': 'sum'}
-        ).reset_index()
-
-        # Preparar target
         col_i = next((c for c in ['data_inicio','datainicio'] if c in df_main.columns), None)
         uc_col = next((c for c in ['designacao_unidade_curricular','nome_disci'] if c in df_main.columns), None)
         turno_col = 'turno_extraido' if 'turno_extraido' in df_main.columns else 'turno'
@@ -286,7 +276,6 @@ class DataTransformer:
         df_main['_mk_uc'] = df_main[uc_col].astype(str).str.strip().str.upper() if uc_col else ''
         df_main['_mk_turno'] = df_main.get(turno_col, pd.Series([''] * len(df_main))).astype(str).str.strip()
 
-        pre_len = len(df_main)
         df_merged = pd.merge(df_main, pres_agg, on=['_mk_date','_mk_uc','_mk_turno'], how='left', suffixes=('','_fp'))
 
         if 'presencas_fp' in df_merged.columns:
@@ -295,48 +284,33 @@ class DataTransformer:
         elif 'presencas' not in df_merged.columns:
             df_merged['presencas'] = 0
 
+        ghost_count = (df_merged['presencas'] == 0).sum()
+        if ghost_count > 0:
+            self.logger.info(f"[GHOST_SESSIONS] {ghost_count:,} registos com presencas = 0.")
+
         df_merged.drop(columns=['_mk_date','_mk_uc','_mk_turno'], inplace=True, errors='ignore')
-
-        matched = (df_merged['presencas'] > 0).sum()
-        self.logger.info(f"Presenças cruzadas: {matched:,}/{len(df_merged):,}")
-
-        # Proteção contra produto cartesiano
-        if len(df_merged) != pre_len:
-            self.logger.warning(f"CORREÇÃO: Removendo duplicados do merge ({len(df_merged):,} linhas).")
-            dup_cols = [c for c in [col_i,'espaco','codigo_unidade_curricular','turno_extraido'] if c in df_merged.columns]
-            if dup_cols:
-                df_merged = df_merged.sort_values('presencas', ascending=False).drop_duplicates(subset=dup_cols, keep='first')
 
         return df_merged
 
-    # =================================================================
-    # 12. PROCESSAMENTO DE CURSOS (Reference Data)
-    # =================================================================
     def _process_courses(self, df_cursos: pd.DataFrame) -> pd.DataFrame:
-        """Limpa o dicionário de cursos, extraindo codigo_uc limpo."""
         df_c = df_cursos.copy()
-        # Normalizar colunas que podem ter nomes com acentos estranhos
         col_map = {c: c.lower().strip() for c in df_c.columns}
         df_c = df_c.rename(columns=col_map)
 
-        # Garantir que todas as colunas-chave são strings limpas
         for col in ['codigo_curso', 'codigo_uc']:
             if col in df_c.columns:
                 df_c[col] = df_c[col].fillna('').astype(str).str.strip()
                 df_c[col] = df_c[col].replace({'nan': '', 'None': '', '<NA>': ''})
 
-        # Filtrar linhas com códigos vazios
         df_c = df_c[df_c['codigo_curso'].str.len() > 0].copy()
         df_c = df_c[df_c['codigo_uc'].str.len() > 0].copy()
 
-        # Extrair código da UC sem o prefixo do curso
         df_c['codigo_uc_limpo'] = df_c.apply(
             lambda x: x['codigo_uc'][len(x['codigo_curso']):]
             if x['codigo_uc'].startswith(x['codigo_curso']) else x['codigo_uc'], axis=1
         )
         df_c['codigo_uc_limpo'] = df_c['codigo_uc_limpo'].str.lstrip('0')
 
-        # Normalizar nome_curso / designacao_curso
         nome_col = next((c for c in ['nome_curso','designacao_curso'] if c in df_c.columns), None)
         if nome_col and nome_col != 'nome_curso':
             df_c = df_c.rename(columns={nome_col: 'nome_curso'})
@@ -344,7 +318,6 @@ class DataTransformer:
         return df_c
 
     def _merge_course_data(self, df_main: pd.DataFrame, df_cursos: pd.DataFrame) -> pd.DataFrame:
-        """Enriquece dados com nomes de cursos via merge no código da UC."""
         df_cursos_clean = self._process_courses(df_cursos)
         uc_col = 'cod_disc' if 'cod_disc' in df_main.columns else 'codigo_unidade_curricular'
         df_enriched = pd.merge(
@@ -355,27 +328,22 @@ class DataTransformer:
         return df_enriched
 
     # =================================================================
-    # 13. MAPEAMENTO FINAL PARA SCHEMA DW (PascalCase)
+    # 10. ALINHAMENTO COM DDL DW
     # =================================================================
     def _align_to_schema(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Renomeia colunas do DataFrame para os nomes exactos do schema_dw.sql.
-        Realiza a auditoria final de nulos.
-        """
-        # Imputação final
         impute_map = {
             'edificio': 'Edifício Desconhecido', 'espaco': 'Espaço Desconhecido',
             'tipo': 'N/D', 'estado': 'N/D', 'turno_extraido': 'N/D',
             'ciclo_estudo': 'N/D', 'codigo_unidade_curricular': 'SEM_UNIDADE / RESERVA_ADMIN',
             'designacao_unidade_curricular': 'SEM_UNIDADE / RESERVA_ADMIN',
-            'unidade_responsavel': 'Indefinido/N.D.', 'pessoa_resp': 'Indefinido/N.D.',
-            'nome_curso': 'N/D', 'codigo_curso': 'N/D',
+            'unidade_respon': 'Indefinido/N.D.', 'unidade_responsavel': 'Indefinido/N.D.',
+            'pessoa_resp': 'Indefinido/N.D.', 'nome_curso': 'N/D', 'codigo_curso': 'N/D',
+            'descricao_epoca': 'N/D'
         }
         for col, default in impute_map.items():
             if col in df.columns:
                 df[col] = df[col].fillna(default).replace({'nan': default, '<NA>': default, '': default})
 
-        # Garantir que Codigo_UC é string limpa (anti float-poisoning)
         uc_code_col = next((c for c in ['codigo_unidade_curricular','cod_disc'] if c in df.columns), None)
         if uc_code_col:
             df[uc_code_col] = (
@@ -384,18 +352,19 @@ class DataTransformer:
                 .str.strip()
             )
 
-        # Conversão de booleanos para int (MySQL compatível) — Bug 2: evita mismatch True/False vs 0/1
-        if 'is_online' in df.columns:
-            df['is_online'] = df['is_online'].astype(int)
         if 'flag_evento_agregado' in df.columns:
-            df['flag_evento_agregado'] = df['flag_evento_agregado'].astype(int)
+            df['flag_evento_agregado'] = df['flag_evento_agregado'].astype(bool)
 
-        # Imputação de métricas numéricas (garantir zero nulos)
         for num_col in ['presencas', 'duracao_minutos']:
             if num_col in df.columns:
                 df[num_col] = pd.to_numeric(df[num_col], errors='coerce').fillna(0).astype(int)
 
-        # Renomeação final para PascalCase (schema_dw.sql)
+        if 'is_online' in df.columns:
+            df['is_online'] = df['is_online'].astype(int)
+
+        if 'is_online' in df.columns:
+            df['is_online'] = df['is_online'].astype(int)
+
         rename_map = {
             'edificio': 'Edificio',
             'espaco': 'Nome_Espaco',
@@ -403,15 +372,17 @@ class DataTransformer:
             'estado': 'Estado',
             'turno_extraido': 'Designacao_Turno',
             'ciclo_estudo': 'Ciclo_Estudo',
-            'unidade_responsavel': 'Unidade_Responsavel',
-            'pessoa_resp': 'Nome_Responsavel',
+            'unidade_responsavel': 'Escola_Responsavel',
+            'unidade_respon': 'Escola_Responsavel',
+            'pessoa_resp': 'Docente_Responsavel',
             'duracao_minutos': 'Duracao_Minutos',
             'flag_evento_agregado': 'Flag_Evento_Agregado',
             'presencas': 'Numero_Presencas',
             'is_online': 'is_online',
             'categoria_espaco': 'Categoria_Espaco',
+            'descricao_epoca': 'Descricao_Epoca'
         }
-        # Codigo_UC e Designacao_UC
+
         if 'codigo_unidade_curricular' in df.columns:
             rename_map['codigo_unidade_curricular'] = 'Codigo_UC'
         elif 'cod_disc' in df.columns:
@@ -420,13 +391,13 @@ class DataTransformer:
             rename_map['designacao_unidade_curricular'] = 'Designacao_UC'
         elif 'nome_disci' in df.columns:
             rename_map['nome_disci'] = 'Designacao_UC'
-        # Curso
         if 'nome_curso' in df.columns:
             rename_map['nome_curso'] = 'Nome_Curso'
         if 'codigo_curso' in df.columns:
             rename_map['codigo_curso'] = 'Codigo_Curso'
 
         df = df.rename(columns={k: v for k, v in rename_map.items() if k in df.columns})
+        df = df.loc[:, ~df.columns.duplicated()]
         return df
 
     # =================================================================
@@ -434,40 +405,31 @@ class DataTransformer:
     # =================================================================
     def apply_pipeline(self, df_main: pd.DataFrame, df_cursos: pd.DataFrame = None,
                        df_presencas: pd.DataFrame = None, df_stg: pd.DataFrame = None) -> pd.DataFrame:
-        """Orquestração sequencial de todas as transformações da Fact Table."""
         self.logger.info("═" * 60)
         self.logger.info("A iniciar Transformação Dimensional...")
 
-        # 1. Enriquecimento via SQL Staging
         if df_stg is not None:
             df_main = self._merge_hybrid_stg(df_main, df_stg)
 
-        # 2. Limpezas Estruturais
         df_main = self._clean_strings(df_main)
         df_main = self._impute_responsavel(df_main)
         df_main = self._enforce_academic_dummy(df_main)
+        df_main = self._flag_reserva_sem_uc(df_main)
         df_main = self._normalize_edificios(df_main)
         df_main = self._extract_turno(df_main)
 
-        # 3. Regras de Negócio (Online, Duração, Outliers)
         df_main = self._apply_business_filters(df_main)
-
-        # 3b. Classificação de Espaço (Categoria + Override Online)
         df_main = self._classify_espaco(df_main)
+        df_main = self._classify_epoca(df_main)
 
-        # 4. Integração do Dicionário de Cursos
         if df_cursos is not None:
             df_main = self._merge_course_data(df_main, df_cursos)
 
-        # 5. Integração de Presenças (Chave Semântica)
         if df_presencas is not None:
             df_main = self._merge_attendance(df_main, df_presencas)
 
-        # 6. Chaves Temporais e ID_Ocupacao
         df_main = self._generate_temporal_keys(df_main)
         df_main = self._generate_ocupacao_id(df_main)
-
-        # 7. Alinhamento Final com Schema DW
         df_main = self._align_to_schema(df_main)
 
         self.logger.info(f"Transformação Completa. Volume final: {len(df_main):,} registos.")

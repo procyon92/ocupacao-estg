@@ -36,7 +36,7 @@ def reset_dw():
         tables = [
             'facto_ocupacao', 'dim_espaco', 'dim_unidade_curricular',
             'dim_responsavel', 'dim_turno', 'dim_tipo_atividade',
-            'dim_estado_agendamento', 'dim_curso'
+            'dim_estado_agendamento', 'dim_curso', 'dim_data', 'dim_hora', 'dim_epoca'
         ]
         for tbl in tables:
             try:
@@ -53,13 +53,16 @@ def reset_dw():
         conn.execute(text("SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';"))
 
         dummies = [
-            "INSERT IGNORE INTO dim_espaco (SK_Espaco, Edificio, Nome_Espaco, Unidade_Responsavel, is_online) VALUES (0, 'N/D', 'N/D', 'N/D', 0)",
-            "INSERT IGNORE INTO dim_unidade_curricular (SK_Unidade_Curricular, Codigo_UC, Designacao_UC, Ciclo_Estudo) VALUES (0, 'N/D', 'N/D', 'N/D')",
-            "INSERT IGNORE INTO dim_curso (SK_Curso, Codigo_Curso, Nome_Curso) VALUES (0, 'N/D', 'N/D')",
-            "INSERT IGNORE INTO dim_responsavel (SK_Responsavel, Nome_Responsavel) VALUES (0, 'N/D')",
+            "INSERT IGNORE INTO dim_espaco (SK_Espaco, Edificio, Nome_Espaco, Categoria_Espaco, Escola_Responsavel, is_online, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', 'N/D', 'N/D', 0, '1900-01-01', '9999-12-31', 1)",
+            "INSERT IGNORE INTO dim_unidade_curricular (SK_Unidade_Curricular, Codigo_UC, Designacao_UC, Ciclo_Estudo, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', 'N/D', '1900-01-01', '9999-12-31', 1)",
+            "INSERT IGNORE INTO dim_curso (SK_Curso, Codigo_Curso, Nome_Curso, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', '1900-01-01', '9999-12-31', 1)",
+            "INSERT IGNORE INTO dim_responsavel (SK_Responsavel, Docente_Responsavel) VALUES (0, 'N/D')",
             "INSERT IGNORE INTO dim_tipo_atividade (SK_Tipo_Atividade, Designacao_Atividade) VALUES (0, 'N/D')",
             "INSERT IGNORE INTO dim_estado_agendamento (SK_Estado_Agendamento, Estado) VALUES (0, 'N/D')",
-            "INSERT IGNORE INTO dim_turno (SK_Turno, Designacao_Turno) VALUES (0, 'N/D')"
+            "INSERT IGNORE INTO dim_turno (SK_Turno, Designacao_Turno) VALUES (0, 'N/D')",
+            "INSERT IGNORE INTO dim_epoca (SK_Epoca, Descricao_Epoca) VALUES (0, 'N/D')",
+            "INSERT IGNORE INTO dim_data (SK_Data, DataCompleta, Ano, Ano_Escolar, Mes, Numero_Semana, Dia, DiaSemana, Semestre, Tipo_Dia) VALUES (0, '1900-01-01', 1900, 'N/D', 1, 0, 1, 'N/D', 0, 'N/D')",
+            "INSERT IGNORE INTO dim_hora (SK_Hora, Hora, Minuto) VALUES (0, 0, 0)"
         ]
         for d in dummies:
             conn.execute(text(d))

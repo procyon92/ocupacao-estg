@@ -1,16 +1,30 @@
-# Pipeline ETL — Plataforma de Análise de Ocupação ESTG
+# Pipeline ETL e Dashboard BI — Análise de Ocupação ESTG
 
-Pipeline de Extração, Transformação e Carregamento (ETL) para o Data Warehouse de suporte à análise da ocupação de espaços letivos da ESTG. Processa dados brutos de agendamentos e presenças num modelo dimensional (Star Schema) para fins de Business Intelligence.
+## Visão Geral do Projeto
 
-## Requisitos do Sistema
+Sistema de Extração, Transformação e Carregamento (ETL) para um Data Warehouse dimensional que suporta a análise de ocupação de espaços letivos da Escola Superior de Tecnologia e Gestão (ESTG). O pipeline processa dados brutos de agendamentos e assiduidade académica, materializando-os num modelo Star Schema em MySQL. Uma camada de Business Intelligence baseada em Streamlit disponibiliza visualizações interativas sobre os dados carregados.
 
-* **Interpretador:** Python 3.10+
-* **Base de Dados:** MySQL Server 8.0+
-* **Esquema:** Executar `schema_dw.sql` antes da primeira utilização.
+## Pré-requisitos
 
-## Configuração do Ambiente
+- **Python 3.10+**
+- **MySQL Server 8.0+**
+- **Pip** para instalação de dependências Python
 
-O pipeline utiliza um ficheiro `.env` para credenciais de acesso:
+### Dependências Python
+
+```bash
+pip install pandas sqlalchemy pymysql python-dotenv
+```
+
+### Dashboard BI
+
+```bash
+pip install -r streamlit-dashboard/requirements.txt
+```
+
+### Configuração de Credenciais
+
+O ficheiro `.env.example` deve ser copiado para `.env` na raiz do repositório e preenchido com as credenciais de acesso à base de dados MySQL:
 
 ```
 DB_HOST=localhost
@@ -20,74 +34,116 @@ DB_PASSWORD=<password>
 DB_NAME=dw_ocupacao
 ```
 
-Dependências:
+O mesmo ficheiro `.env` é utilizado tanto pelo pipeline ETL como pelo dashboard.
+
+## Inicialização da Base de Dados
+
+Antes da primeira execução, o script de DDL deve ser aplicado ao servidor MySQL:
+
 ```bash
-pip install pandas sqlalchemy pymysql python-dotenv
+mysql -u root -p < database/schema_dw.sql
 ```
 
-## Estrutura de Dados (Input)
+Este script cria a base de dados `dw_ocupacao` e todas as tabelas do modelo dimensional (dimensões e tabela de factos), incluindo as colunas de controlo SCD2 (`Valid_From`, `Valid_From`, `Valid_To`, `Is_Active`) e as chaves estrangeiras da Facto_Ocupacao.
 
-O pipeline espera uma diretoria `Dados/` com:
+## Dados de Entrada
 
-| Ficheiro | Descrição | Encoding | Separador |
+O pipeline espera encontrar os seguintes ficheiros no diretório `dados/`:
+
+| Ficheiro | Descricao | Encoding | Separador |
 |---|---|---|---|
-| `PorSalaTurno.csv` | Registo de agendamentos de espaços | `cp1252` | `,` |
-| `PorTurnoPresencas.csv` | Registo de assiduidade académica | `cp1252` | `,` |
-| `curso_ucs(in).csv` | Dicionário mestre de cursos/UCs | `latin-1` | `;` |
-| `script_espacos_salas_turnos.sql` | Dump SQL com metadados de responsáveis | `utf-8` | — |
+| `PorSalaTurno.csv` | Registo de agendamentos de espacos | `cp1252` | `,` |
+| `PorTurnoPresencas.csv` | Registo de assiduidade academica | `cp1252` | `,` |
+| `curso_ucs(in).csv` | Dicionario mestre de cursos e UCs | `latin-1` | `;` |
+| `script_espacos_salas_turnos.sql` | Dump SQL com metadados de responsaveis | `utf-8` | — |
 
-## Arquitetura dos Módulos (SRP)
+## Guia de Execução
 
-Cada módulo tem responsabilidade única:
+> **ATENCAO:** Todos os comandos devem ser executados a executados a partir da directoria raiz do repositorio. Os caminhos para o ficheiro `.env` e para a pasta `dados/` são relativos ao diretório de trabalho atual.
 
-| Módulo | Responsabilidade |
+### Passo 1 — Limpeza do Data Warehouse
+
+```bash
+python processo_etl/cleanup_dw.py
+```
+
+Este utilitario executa as seguintes operacoes:
+1. Desativa as verificacoes de chave estrangeira
+2. Trunca todas as tabelas dinâmicas
+3. Reinsere os registos dummy com Surrogate Key igual a zero em todas as dimensoes
+
+### Passo 2 — Execucao do Pipeline ETL
+
+```bash
+python processo_etl/main.py
+```
+
+O orquestrador coordena sequencialmente as tres fases:
+
+- **Extracao (Extract):** Le os ficheiros CSV e o dump SQL, normalizando os nomes das colunas para `snake_case`.
+- **Transformacao (Transform):** Aplica regras de negocio — normalizacao de edificios, imputacao de valores nulos, extracao de turnos por expressao regular, classificacao de espacos e epocas, filtro de duracao anómala, merge semantico de presencas, e alinhamento final com o schema do Data Warehouse.
+- **Carregamento (Load):** Insere ou atualiza dimensoes (SCD tipo 1 e tipo 2), gera as dimensoes estaticas (Dim_Hora, Dim_Data), e carrega a tabela de factos em lotes de 5000 registos.
+
+O sistema produz registos de auditoria detalhados no terminal, incluindo volumes processados e metricas de integridade das Surrogate Keys.
+
+### Passo 3 — Lancamento do Dashboard
+
+```bash
+streamlit run streamlit-dashboard/main.py
+```
+
+Inicia a interface de Business Intelligence num browser local. O dashboard disponibiliza cinco páginas:
+
+- **Dashboard:** Indicadores-chave (KPIs), série temporal de ocupacao, distribuição por edificio, tabela de ocupações recentes e métricas de qualidade.
+- **Ocupacao:** Mapa de calor por hora e dia da semana, top espacos e distribuição por tipo de atividade.
+- **Espacos:** Analise detalhada por edificio, espaco e edificio com tabela de resumo agregado.
+- **Relatorios:** Exportação dos dados filtrados em formato CSV.
+- **ETL / Logs:** Monitorização da qualidade dos dados carregados.
+
+As credenciais de acesso predefinidas sao `admin/estg2025` ou `docente/estg2025`.
+
+## Arquitetura dos Modulos
+
+| Modulo | Responsabilidade |
 |---|---|
-| **`extract.py`** | Ingestão de dados. Lê CSVs/SQL e normaliza colunas para `snake_case`. Sem transformações de negócio. |
-| **`transform.py`** | Transformação e regras de negócio. Limpeza de strings, imputação de nulos, normalização de edifícios, extração de turnos (regex), flag `is_online`, filtros de outliers, merge semântico de presenças, e mapeamento final para PascalCase do schema DW. |
-| **`load.py`** | Materialização no MySQL. Gestão de Surrogate Keys (SCD Tipo 1), geração de Dim_Hora, inserção de dummies (SK=0), e carregamento em lote da Facto_Ocupacao. |
-| **`main.py`** | Orquestrador. Coordena E→T→L sem conter lógica de negócio. |
-| **`cleanup_dw.py`** | Utilitário para limpeza (truncate) e reposição de dummies. |
-
-## Regras de Transformação Aplicadas
-
-Conforme definido no `mapa_logico_dados.xlsx` e `relatorio_projeto_ESTG.pdf`:
-
-1. **Normalização de Edifícios:** Remoção de sufixos em parênteses (e.g. `Edifício A (ESTG)` → `EDIFÍCIO A`) para resolver as 320+ inconsistências hierárquicas.
-2. **Imputação de Responsáveis:** `pessoa_resp` com 77% de nulos → `'Indefinido/N.D.'` na `Dim_Responsavel`.
-3. **Reservas sem UC:** 2.502 registos sem atributos académicos → `'SEM_UNIDADE / RESERVA_ADMIN'` na `Dim_Unidade_Curricular`.
-4. **Extração de Turnos:** Regex `\b(TP\d*|T\d+|P\d+|PL\d+|S\d+|OT\d+)\b` aplicada ao campo de descrição. Falhas → `'N/D'`.
-5. **Flag Online (RF05):** `is_online = TRUE` quando `edificio` ou `estado` contém `Online|Ensino a Distância|Virtual|Zoom`. Atributo reside na `Dim_Espaco`.
-6. **Filtro de Outliers:** Sessões com duração ≤ 0 ou > 360 minutos (6h) são eliminadas. Datas nulas/corrompidas (`0000-00-00`) são excluídas.
-7. **Merge de Presenças:** Chave semântica `Data (date-part) + UPPER(Nome_UC) + Turno`, com imputação de `0` onde não há correspondência.
-8. **Codigo_UC:** Casting estrito para string com remoção de sufixo `.0` (anti float-poisoning).
-9. **Dim_Data:** Calendário de 2018-01-01 a 2035-12-31, com `Numero_Semana`, `Ano_Letivo`, `Semestre`, `Epoca_Exame`, `Tipo_Dia` e `DiaSemana` em português.
-
-## Execução
-
-1. **Limpeza do ambiente (opcional — Fresh Start):**
-   ```bash
-   python cleanup_dw.py
-   ```
-
-2. **Execução do pipeline:**
-   ```bash
-   python main.py
-   ```
-
-O sistema gera logs detalhados na consola com volumes processados e métricas de integridade das Surrogate Keys.
+| `processo_etl/extract.py` | Ingestao de dados a partir de CSV e SQL dump |
+| `processo_etl/transform.py` | Regras de transformacao e limpeza |
+| `processo_etl/load.py` | Materializacao no MySQL com gestao de Surrogate Keys |
+| `processo_etl/main.py` | Orquestrador do pipeline |
+| `processo_etl/cleanup_dw.py` | Utilitario de limpeza e reposição de dummies |
+| `streamlit-dashboard/` | Aplicacao Streamlit para visualizacao BI |
 
 ## Modelo Dimensional (Star Schema)
 
-```
-                  ┌── Dim_Data (Calendário Académico)
-                  ├── Dim_Hora (Relógio 0-2359)
-                  ├── Dim_Espaco (Edifício + Sala + is_online)
-                  ├── Dim_Unidade_Curricular (Código + Designação + Ciclo)
-Facto_Ocupacao ───┼── Dim_Curso (Código + Nome)
-                  ├── Dim_Responsavel (Nome)
-                  ├── Dim_Turno (Designação)
-                  ├── Dim_Tipo_Atividade (Designação)
-                  └── Dim_Estado_Agendamento (Estado)
-```
+A Facto_Ocupacao encontra-se no centro do esquema, relacionando-se com oito dimensoes:
 
-Métricas da Facto: `Duracao_Minutos`, `Numero_Presencas`, `Flag_Evento_Agregado`.
+- `Dim_Data` — Calendario academico (2018-01-01 a 2035-12-31) com ano letivo, semestre, tipo de-sana, tipo de dia
+- `Dim_Hora` — Relogio de 0 a 2359
+- `Dim_Espaco` — Edificio, sala, categoria, escola responsavel, indicador online
+- `Dim_Unidade_Curricular` — Codigo, designacao, ciclo de estudos (SCD tipo 2)
+- `Dim_Curso` — Codigo e nome (SCD tipo 2)
+- `Dim_Responsavel` — Docente responsavel
+- `Dim_Turno` CH Designacao do turno
+- `Dim_Tipo_Atividade` — Designacao da atividade
+- `Dim_Estado_Agendamento` — Estado do agendamento
+- `Dim_Epoca` — Descricao da epoca letiva
+
+Metricas armazenadas na Facto_Ocupacao: `Duracao_Minutos`, `Numero_Presencas`, `Flag_Evento_Agregado`.
+
+## Estrategia SCD
+
+| Tipo | Dimensoes |
+|---|---|
+| SCD Tipo 2 | Dim_Espaco, Dim_Unidade_Curricular, Dim_Curso |
+| SCD Tipo 1 | Dim_Responsavel, Dim_Turno, Dim_Tipo_Atividade, Dim_Estado_Agendamento, Dim_Epoca |
+
+## Regras de Qualidade Aplicadas
+
+1. Normalizacao de edificios — remocao de sufixos entre parenteses
+2. Imputacao de responsaveis — `'Indefinido/N.D.'` para 77% de nulos
+3. Reservas sem codigo curricular — mapeadas para `'SEM_UNIDADE / RESERVA_ADMIN'`
+4. Extracao de turno via regex — valores nao correspondentes recebem `'N/D'`
+5. Sessoes online detetadas por palavras-chave no edificio ou estado
+6. Sessoes com duracao <= 0 ou > 360 minutos eliminadas
+7. Merge de presencas por chave semantica (data, nome da UC, turno)
+8. Codigo_UC tratado como string com remocao de sufixo decimal

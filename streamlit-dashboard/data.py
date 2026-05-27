@@ -25,10 +25,6 @@ _FILTER_COLUMNS = {
     "uc":              ("uc","Designacao_UC",      "Dim_Unidade_Curricular", "uc", "f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular"),
 }
 
-_JOIN_ALIASES = {
-    "Dim_Data": "d", "Dim_Espaco": "e", "Dim_Unidade_Curricular": "uc",
-    "Dim_Curso": "c", "Dim_Espaco": "e",
-}
 
 @st.cache_data(ttl=300)
 def get_cascade_options(target_column: str, parent_filters: dict = None, only_labs: bool = False) -> list:
@@ -159,6 +155,100 @@ def get_epocas() -> list:
         conn.close()
 
 
+@st.cache_data(ttl=300)
+def get_total_rooms_count() -> int:
+    """Total number of unique physical rooms in Dim_Espaco (excluding N/D)."""
+    conn = _get_connection()
+    try:
+        query = "SELECT COUNT(DISTINCT Nome_Espaco) FROM Dim_Espaco WHERE Nome_Espaco != 'N/D'"
+        df = pd.read_sql(query, conn)
+        return int(df.iloc[0, 0])
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_dias_semana() -> list:
+    """Distinct weekdays present in the fact table."""
+    conn = _get_connection()
+    try:
+        query = "SELECT DISTINCT d.DiaSemana AS val FROM Facto_Ocupacao f JOIN Dim_Data d ON f.SK_Data = d.SK_Data WHERE d.DiaSemana NOT IN ('N/D','Domingo') ORDER BY FIELD(d.DiaSemana,'Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado')"
+        df = pd.read_sql(query, conn)
+        return df["val"].tolist()
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_semanas(ano_letivo: str = None, semestre: int = None) -> list:
+    """Distinct week numbers available in the fact table, optionally filtered."""
+    conn = _get_connection()
+    try:
+        query = "SELECT DISTINCT d.Numero_Semana AS val FROM Facto_Ocupacao f JOIN Dim_Data d ON f.SK_Data = d.SK_Data WHERE d.Numero_Semana != 0"
+        params = []
+        if ano_letivo:
+            query += " AND d.Ano_Escolar = %s"; params.append(ano_letivo)
+        if semestre is not None:
+            query += " AND d.Semestre = %s"; params.append(semestre)
+        query += " ORDER BY val"
+        df = pd.read_sql(query, conn, params=params)
+        return df["val"].tolist()
+    finally:
+        conn.close()
+
+
+@st.cache_data(ttl=300)
+def get_occupancy_by_slot(
+    ano_letivo: str = None,
+    semestre: int = None,
+    departamento: str = None,
+    edificio: str = None,
+    categoria_espaco: str = None,
+) -> pd.DataFrame:
+    """
+    Return occupancy ratio per (DiaSemana, Hora_Inicio) slot.
+    Ratio = occupied rooms in slot / total rooms in the filtered set.
+    """
+    conn = _get_connection()
+    try:
+        base_joins = """
+            FROM Facto_Ocupacao f
+            JOIN Dim_Data d ON f.SK_Data = d.SK_Data
+            JOIN Dim_Hora h1 ON f.SK_Hora_Inicio = h1.SK_Hora
+            JOIN Dim_Espaco e ON f.SK_Espaco = e.SK_Espaco
+        """
+        where_clauses = ["1=1"]
+        params = []
+
+        if ano_letivo:
+            where_clauses.append("d.Ano_Escolar = %s"); params.append(ano_letivo)
+        if semestre is not None:
+            where_clauses.append("d.Semestre = %s"); params.append(semestre)
+        if departamento:
+            where_clauses.append("e.Escola_Responsavel = %s"); params.append(departamento)
+        if edificio:
+            where_clauses.append("e.Edificio = %s"); params.append(edificio)
+        if categoria_espaco:
+            where_clauses.append("e.Categoria_Espaco = %s"); params.append(categoria_espaco)
+
+        where_sql = " AND ".join(where_clauses)
+
+        query = f"""
+            SELECT
+                d.DiaSemana,
+                h1.Hora AS Hora_Inicio,
+                COUNT(DISTINCT f.SK_Espaco) AS Salas_Ocupadas
+            {base_joins}
+            WHERE {where_sql}
+            GROUP BY d.DiaSemana, h1.Hora
+            ORDER BY FIELD(d.DiaSemana,'Segunda-feira','Terça-feira','Quarta-feira','Quinta-feira','Sexta-feira','Sábado'), h1.Hora
+        """
+        df = pd.read_sql(query, conn, params=params)
+        return df
+    finally:
+        conn.close()
+
+
 @st.cache_data(ttl=120)
 def get_filtered_data(
     ano_letivo: str = None,
@@ -189,6 +279,7 @@ def get_filtered_data(
                 d.Mes,
                 d.DiaSemana,
                 d.Semestre,
+                d.Numero_Semana,
                 d.Tipo_Dia,
                 ep.Descricao_Epoca,
                 h1.Hora AS Hora_Inicio,

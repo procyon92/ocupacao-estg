@@ -2,9 +2,7 @@
 plots.py — V2 Plotly visualisations for the ESTG Dashboard.
 """
 import plotly.graph_objects as go
-import plotly.express as px
 import pandas as pd
-import numpy as np
 import calendar
 from config import COLORS
 
@@ -29,6 +27,21 @@ def _base_layout(fig: go.Figure, title: str = "", height: int = 380) -> go.Figur
     fig.update_xaxes(showgrid=True, gridcolor=COLORS["chart_grid"], gridwidth=0.5, zeroline=False)
     fig.update_yaxes(showgrid=True, gridcolor=COLORS["chart_grid"], gridwidth=0.5, zeroline=False)
     return fig
+
+
+def _build_heatmap_pivot(df: pd.DataFrame, value_col: str) -> tuple:
+    """Shared preamble for weekday×hour heatmaps. Returns (pivot, y_labels, day_order)."""
+    day_order = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+    short_days = {"Segunda-feira": "Seg", "Terça-feira": "Ter", "Quarta-feira": "Qua",
+                  "Quinta-feira": "Qui", "Sexta-feira": "Sex", "Sábado": "Sáb"}
+    df = df[df["DiaSemana"].isin(day_order)].copy()
+    pivot = df.pivot_table(index="DiaSemana", columns="Hora_Inicio", values=value_col, fill_value=0)
+    pivot = pivot.reindex([d for d in day_order if d in pivot.index])
+    active_hours = sorted([h for h in pivot.columns if pivot[h].sum() > 0])
+    if active_hours:
+        pivot = pivot[active_hours]
+    y_labels = [short_days.get(d, d) for d in pivot.index]
+    return pivot, y_labels, day_order
 
 
 def chart_ocupacao_tempo(df: pd.DataFrame, granularity: str = "Mensal") -> go.Figure:
@@ -96,15 +109,7 @@ def chart_heatmap_ocupacao(df_heatmap: pd.DataFrame) -> go.Figure:
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
         return _base_layout(fig, "Mapa de Calor — Ocupação por Hora")
 
-    day_order = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
-    df_heatmap = df_heatmap[df_heatmap["DiaSemana"].isin(day_order)]
-    pivot = df_heatmap.pivot_table(index="DiaSemana", columns="Hora_Inicio", values="Total_Ocupacoes", fill_value=0)
-    pivot = pivot.reindex([d for d in day_order if d in pivot.index])
-    active_hours = sorted([h for h in pivot.columns if pivot[h].sum() > 0])
-    if active_hours:
-        pivot = pivot[active_hours]
-    short_days = {"Segunda-feira": "Seg", "Terça-feira": "Ter", "Quarta-feira": "Qua", "Quinta-feira": "Qui", "Sexta-feira": "Sex", "Sábado": "Sáb"}
-    y_labels = [short_days.get(d, d) for d in pivot.index]
+    pivot, y_labels, _ = _build_heatmap_pivot(df_heatmap, "Total_Ocupacoes")
 
     fig = go.Figure(data=go.Heatmap(
         z=pivot.values, x=[f"{h}h" for h in pivot.columns], y=y_labels,
@@ -332,7 +337,7 @@ def chart_monthly_calendar(df: pd.DataFrame, year: int, month: int) -> go.Figure
                 row.append(val)
                 hrow.append(
                     f"{d.strftime('%d/%m/%Y')} ({day_names[day_idx]})<br>"
-                    f"Sessões: {val}<extra></extra>"
+                    f"Sessões: {val}"
                 )
         z.append(row)
         hover_texts.append(hrow)
@@ -377,4 +382,98 @@ def chart_monthly_calendar(df: pd.DataFrame, year: int, month: int) -> go.Figure
     )
     fig.update_xaxes(showgrid=False, side="top", tickfont=dict(size=11))
     fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(size=11))
+    return fig
+
+
+def chart_critical_heatmap(
+    df: pd.DataFrame,
+    total_rooms: int,
+    low_threshold: float = 30.0,
+    high_threshold: float = 70.0,
+) -> go.Figure:
+    """
+    Heatmap of (DiaSemana × Hora) colored by occupancy ratio.
+    3-tier discrete colorscale using user-defined thresholds:
+      Green  (< low_threshold)   → Low
+      Yellow (low–high)          → Medium
+      Red    (> high_threshold)  → High
+    """
+    if df.empty or total_rooms == 0:
+        fig = go.Figure()
+        fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
+        return _base_layout(fig, "Ocupação Crítica por Horário")
+
+    df = df.copy()
+    df["ratio"] = df["Salas_Ocupadas"] / total_rooms * 100
+    pivot, y_labels, _ = _build_heatmap_pivot(df, "ratio")
+
+    l = low_threshold / 100.0
+    h = high_threshold / 100.0
+
+    fig = go.Figure(data=go.Heatmap(
+        z=pivot.values,
+        x=[f"{h}h" for h in pivot.columns],
+        y=y_labels,
+        colorscale=[
+            [0.0,         "#22C55E"],
+            [l,           "#22C55E"],
+            [l + 0.001,   "#EAB308"],
+            [h,           "#EAB308"],
+            [h + 0.001,   "#EF4444"],
+            [1.0,         "#EF4444"],
+        ],
+        zmin=0,
+        zmax=100,
+        hovertemplate="<b>%{y}</b> às <b>%{x}</b><br>Ocupação: %{z:.1f}%<extra></extra>",
+        showscale=True,
+        colorbar=dict(
+            title=dict(text="Ocupação %", font=dict(size=11)),
+            tickfont=dict(size=10),
+            thickness=12, len=0.8,
+            tickvals=[0, low_threshold, high_threshold, 100],
+            ticktext=[f"0%", f"{low_threshold:.0f}%", f"{high_threshold:.0f}%", "100%"],
+        ),
+    ))
+
+    fig = _base_layout(fig, "Ocupação Crítica por Horário", height=350)
+    fig.update_yaxes(showgrid=False, autorange="reversed")
+    fig.update_xaxes(showgrid=False, side="top")
+    return fig
+
+
+def chart_comparison_trend(rooms_dict: dict) -> go.Figure:
+    """
+    Overlaid daily occupancy trend for multiple rooms.
+    rooms_dict: {room_name: pd.DataFrame with 'DataCompleta' column}
+    Each trace is a daily count for that room.
+    """
+    if not rooms_dict:
+        fig = go.Figure()
+        fig.add_annotation(text="Sem dados para comparação", showarrow=False,
+                           font=dict(size=16, color="#94A3B8"))
+        return _base_layout(fig, "Comparação de Ocupação")
+
+    palette = COLORS["donut_palette"]
+    fig = go.Figure()
+
+    for i, (room_name, room_df) in enumerate(rooms_dict.items()):
+        if room_df.empty:
+            continue
+        daily = room_df.copy()
+        daily["Data"] = pd.to_datetime(daily["DataCompleta"]).dt.date
+        counts = daily.groupby("Data").size().reset_index(name="count")
+        counts = counts.sort_values("Data")
+        fig.add_trace(go.Scatter(
+            x=counts["Data"].astype(str),
+            y=counts["count"],
+            mode="lines+markers",
+            name=room_name,
+            line=dict(color=palette[i % len(palette)], width=2),
+            marker=dict(size=6),
+            hovertemplate=f"<b>{room_name}</b><br>%{{x}}<br>Sessões: %{{y}}<extra></extra>",
+        ))
+
+    fig = _base_layout(fig, "Comparação de Ocupação — Tendência Diária", height=400)
+    fig.update_xaxes(title_text="", tickangle=-45)
+    fig.update_yaxes(title_text="Nº Sessões")
     return fig

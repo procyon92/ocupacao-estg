@@ -1,6 +1,6 @@
 """
-main.py — V3 entry point.
-Top horizontal navigation + sidebar contextual filters + profile routing.
+main.py — V4 entry point.
+Top horizontal navigation + sidebar grouped contextual filters + profile routing.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -11,14 +11,17 @@ from config import APP_TITLE, PAGE_TITLE, FAVICON, COLORS
 from auth import check_auth, login_page, logout
 from data import (
     get_anos_letivos, get_departamentos, get_edificios,
-    get_categorias, get_espacos, get_ciclos_estudo, get_cursos, get_ucs, get_epocas,
+    get_categorias, get_espacos, get_ciclos_estudo, get_cursos, get_ucs,
+    get_epocas, get_dias_semana, get_semanas,
 )
-from pages import render_profile_a_general, render_profile_b_labs, render_profile_c_spaces, render_profile_d_quality
+from pages import (
+    render_profile_a_general, render_profile_b_labs,
+    render_profile_c_spaces, render_profile_d_quality,
+    render_profile_e_alerts, render_profile_f_comparison,
+)
 
-# ─── Page config ──────────────────────────────────────────────────
 st.set_page_config(page_title=PAGE_TITLE, page_icon=FAVICON, layout="wide", initial_sidebar_state="expanded")
 
-# ─── CSS ──────────────────────────────────────────────────────────
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
@@ -54,26 +57,32 @@ st.markdown("""
     .sidebar-title { font-size: 1.1rem; font-weight: 800; color: white; padding: 1rem 0.5rem 0.5rem; line-height: 1.3; }
     .sidebar-divider { border-top: 1px solid rgba(255,255,255,0.1); margin: 0.5rem 0; }
     .dashboard-title { font-size: 1.5rem; font-weight: 800; color: #1B2139; }
-    /* Top navigation segmented control */
     [data-testid="stHorizontalNav"] { margin-bottom: 0.5rem; }
     [data-testid="stHorizontalNav"] button { font-weight: 500 !important; }
-    /* Sidebar filter section header */
-    .sidebar-filter-header { font-size: 0.9rem; font-weight: 600; color: white; padding: 0.5rem 0; }
-    .sidebar-filter-divider { border-top: 1px solid rgba(255,255,255,0.08); margin: 0.6rem 0; }
+    .sidebar-group-header {
+        font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.55);
+        text-transform: uppercase; letter-spacing: 0.06em;
+        padding: 0.6rem 0 0.2rem; margin-top: 0.1rem;
+    }
+    .sidebar-group-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 0.4rem 0; }
+    .active-filters {
+        background: rgba(255,255,255,0.06); border-radius: 8px;
+        padding: 0.5rem 0.6rem; font-size: 0.72rem; color: rgba(255,255,255,0.7);
+        line-height: 1.4; margin: 0.3rem 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
-# ─── Auth ─────────────────────────────────────────────────────────
 if not check_auth():
     login_page()
     st.stop()
 
 # ─── Top Horizontal Navigation ───────────────────────────────────
-nav_cols = st.columns([1, 4, 1])
+nav_cols = st.columns([1, 5, 1])
 with nav_cols[0]:
     st.markdown(f"**{APP_TITLE}**")
 with nav_cols[1]:
-    profile_options = ["Visão Geral ESTG", "Laboratórios", "Espaços", "Qualidade"]
+    profile_options = ["Visão Geral ESTG", "Laboratórios", "Detalhe Sala", "Alertas", "Comparação", "Qualidade"]
     profile = st.segmented_control(
         "Navegação",
         options=profile_options,
@@ -87,7 +96,7 @@ with nav_cols[2]:
 
 st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
-# ─── Smart defaults ──────────────────────────────────────────────
+# ─── Smart defaults & shared helpers ─────────────────────────────
 _ANOS = get_anos_letivos()
 _DEFAULT_ANO = _ANOS[0] if _ANOS else None
 _MONTH = datetime.now().month
@@ -105,6 +114,22 @@ def _sem_index():
         return [1, 2].index(val) + 1
     return 0
 
+# ─── Active filters string builder ───────────────────────────────
+def _build_active_string(locals_dict):
+    parts = []
+    d = locals_dict
+    if d.get("ano_val", "Todos") != "Todos": parts.append(f"📅 {d['ano_val']}")
+    if d.get("sem_val", "Todos") != "Todos": parts.append(f"Sem {d['sem_val']}")
+    if d.get("semana_val", "Todas") != "Todas": parts.append(f"S{d['semana_val']}")
+    if d.get("dias_val", []): parts.append(f"Dias: {', '.join(d['dias_val'][:2])}{'…' if len(d['dias_val'])>2 else ''}")
+    if d.get("campus_val", "ESTG") != "Todos": parts.append("📍 ESTG")
+    if d.get("edf_val", "Todos") != "Todos": parts.append(f"🏗 {d['edf_val']}")
+    if d.get("cat_val", "Todos") != "Todos": parts.append(f"📐 {d['cat_val']}")
+    if d.get("dept_val", "Todos") != "Todos": parts.append(f"🏛 {d['dept_val']}")
+    if d.get("ciclo_val", "Todos") != "Todos": parts.append(f"🎓 {d['ciclo_val']}")
+    if d.get("epoca_val", "Todos") != "Todos": parts.append(f"📆 {d['epoca_val']}")
+    return " | ".join(parts) if parts else "Sem filtros ativos"
+
 # ─── Reset filters callback ──────────────────────────────────────
 def _reset_filters():
     anos = get_anos_letivos()
@@ -113,8 +138,10 @@ def _reset_filters():
     st.session_state["v2_filter_semestre"] = 1 if month in [9,10,11,12,1,2] else 2 if month in [3,4,5,6,7] else "Todos"
     for key in ["v2_filter_departamento", "v2_filter_edificio", "v2_filter_categoria_espaco",
                 "v2_filter_espaco", "v2_filter_ciclo_estudo", "v2_filter_curso",
-                "v2_filter_uc", "v2_filter_epoca"]:
+                "v2_filter_uc", "v2_filter_epoca", "v2_filter_semana"]:
         st.session_state[key] = "Todos"
+    st.session_state["v2_filter_campus"] = "ESTG"
+    st.session_state["v2_filter_dias"] = []
     for key in ["v2_toggle_online", "v2_toggle_ghost", "v2_toggle_concurrent"]:
         st.session_state[key] = False
 
@@ -125,50 +152,106 @@ with st.sidebar:
 
     is_lab_profile = (profile == "Laboratórios")
 
-    # ── Profile-specific filter renderers ─────────────────────────
+    # ── Profile-specific filter renderers with grouped sections ──
+    _FILTER_KEYS_ALL = ("ano_", "sem_", "semana_", "dias_", "campus_", "dept_", "epoca_",
+                        "cat_", "edf_", "esp_", "ciclo_", "curso_", "uc_", "hide_")
+
     if profile == "Visão Geral ESTG":
         def _render():
+            st.markdown('<div class="sidebar-group-header">📅 Calendário</div>', unsafe_allow_html=True)
             ano_val = st.selectbox("Ano Letivo", ["Todos"] + _ANOS, index=_ano_index(_ANOS), key="v2_filter_ano_letivo")
             sem_val = st.selectbox("Semestre", ["Todos", 1, 2], index=_sem_index(), key="v2_filter_semestre")
+            semana_opts = ["Todas"] + [str(s) for s in get_semanas(ano_letivo=ano_val if ano_val != "Todos" else None, semestre=sem_val if sem_val != "Todos" else None)]
+            semana_val = st.selectbox("Semana", semana_opts, key="v2_filter_semana")
+            dias_val = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key="v2_filter_dias")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-group-header">📍 Local</div>', unsafe_allow_html=True)
+            campus_val = st.selectbox("Campus", ["Todos", "ESTG"], index=1, key="v2_filter_campus")
             dept_val = st.selectbox("Departamento", ["Todos"] + get_departamentos(), key="v2_filter_departamento")
-            epoca_val = st.selectbox("Época", ["Todos"] + get_epocas(), key="v2_filter_epoca")
-            cat_val = st.selectbox("Categoria", ["Todos"] + get_categorias(), key="v2_filter_categoria_espaco")
             edf_val = st.selectbox("Edifício", ["Todos"] + get_edificios(departamento=dept_val if dept_val != "Todos" else None), key="v2_filter_edificio")
-            esp_val = st.selectbox("Espaço", ["Todos"] + get_espacos(edificio=edf_val if edf_val != "Todos" else None, categoria=cat_val if cat_val != "Todos" else None), key="v2_filter_espaco")
+            cat_val = st.selectbox("Categoria", ["Todos"] + get_categorias(), key="v2_filter_categoria_espaco")
+            esp_val = st.selectbox("Sala", ["Todos"] + get_espacos(edificio=edf_val if edf_val != "Todos" else None, categoria=cat_val if cat_val != "Todos" else None), key="v2_filter_espaco")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-group-header">🎯 Atividades</div>', unsafe_allow_html=True)
             ciclo_val = st.selectbox("Ciclo Estudo", ["Todos"] + get_ciclos_estudo(), key="v2_filter_ciclo_estudo")
+            epoca_val = st.selectbox("Período/Época", ["Todos"] + get_epocas(), key="v2_filter_epoca")
             curso_val = st.selectbox("Curso", ["Todos"] + get_cursos(ciclo=ciclo_val if ciclo_val != "Todos" else None), key="v2_filter_curso")
             uc_val = st.selectbox("UC", ["Todos"] + get_ucs(curso=curso_val if curso_val != "Todos" else None), key="v2_filter_uc")
-            st.markdown('<div class="sidebar-filter-divider"></div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
             hide_online = st.checkbox("Excluir Online", value=False, key="v2_toggle_online")
             hide_ghost = st.checkbox("Ocultar Ghost", value=False, key="v2_toggle_ghost")
             hide_concurrent = st.checkbox("Deduplicar Concurrentes", value=False, key="v2_toggle_concurrent")
-            return {k: v for k, v in locals().items() if k.startswith(("ano_", "sem_", "dept_", "epoca_", "cat_", "edf_", "esp_", "ciclo_", "curso_", "uc_", "hide_"))}
+            return {k: v for k, v in locals().items() if k.startswith(_FILTER_KEYS_ALL)}
         _locals = _render()
 
     elif profile == "Laboratórios":
         def _render():
+            st.markdown('<div class="sidebar-group-header">📅 Calendário</div>', unsafe_allow_html=True)
             ano_val = st.selectbox("Ano Letivo", ["Todos"] + _ANOS, index=_ano_index(_ANOS), key="v2_filter_ano_letivo")
             sem_val = st.selectbox("Semestre", ["Todos", 1, 2], index=_sem_index(), key="v2_filter_semestre")
+            semana_opts = ["Todas"] + [str(s) for s in get_semanas(ano_letivo=ano_val if ano_val != "Todos" else None, semestre=sem_val if sem_val != "Todos" else None)]
+            semana_val = st.selectbox("Semana", semana_opts, key="v2_filter_semana")
+            dias_val = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key="v2_filter_dias")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-group-header">📍 Local</div>', unsafe_allow_html=True)
+            campus_val = st.selectbox("Campus", ["Todos", "ESTG"], index=1, key="v2_filter_campus")
             dept_val = st.selectbox("Departamento", ["Todos"] + get_departamentos(), key="v2_filter_departamento")
-            epoca_val = st.selectbox("Época", ["Todos"] + get_epocas(), key="v2_filter_epoca")
             cat_val = st.selectbox("Categoria", ["Laboratório"], disabled=True, key="v2_filter_categoria_espaco")
             edf_val = st.selectbox("Edifício", ["Todos"] + get_edificios(departamento=dept_val if dept_val != "Todos" else None, only_labs=True), key="v2_filter_edificio")
-            esp_val = st.selectbox("Espaço", ["Todos"] + get_espacos(edificio=edf_val if edf_val != "Todos" else None, only_labs=True), key="v2_filter_espaco")
+            esp_val = st.selectbox("Sala", ["Todos"] + get_espacos(edificio=edf_val if edf_val != "Todos" else None, only_labs=True), key="v2_filter_espaco")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-group-header">🎯 Atividades</div>', unsafe_allow_html=True)
             ciclo_val = st.selectbox("Ciclo Estudo", ["Todos"] + get_ciclos_estudo(only_labs=True), key="v2_filter_ciclo_estudo")
+            epoca_val = st.selectbox("Período/Época", ["Todos"] + get_epocas(), key="v2_filter_epoca")
             curso_val = st.selectbox("Curso", ["Todos"] + get_cursos(ciclo=ciclo_val if ciclo_val != "Todos" else None, only_labs=True), key="v2_filter_curso")
             uc_val = st.selectbox("UC", ["Todos"] + get_ucs(curso=curso_val if curso_val != "Todos" else None, only_labs=True), key="v2_filter_uc")
-            st.markdown('<div class="sidebar-filter-divider"></div>', unsafe_allow_html=True)
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
             hide_online = st.checkbox("Excluir Online", value=False, key="v2_toggle_online")
             hide_ghost = st.checkbox("Ocultar Ghost", value=False, key="v2_toggle_ghost")
             hide_concurrent = st.checkbox("Deduplicar Concurrentes", value=False, key="v2_toggle_concurrent")
-            return {k: v for k, v in locals().items() if k.startswith(("ano_", "sem_", "dept_", "epoca_", "cat_", "edf_", "esp_", "ciclo_", "curso_", "uc_", "hide_"))}
+            return {k: v for k, v in locals().items() if k.startswith(_FILTER_KEYS_ALL)}
         _locals = _render()
 
-    elif profile == "Espaços":
+    elif profile in ("Alertas", "Comparação"):
         def _render():
+            st.markdown('<div class="sidebar-group-header">📅 Calendário</div>', unsafe_allow_html=True)
             ano_val = st.selectbox("Ano Letivo", ["Todos"] + _ANOS, index=_ano_index(_ANOS), key="v2_filter_ano_letivo")
             sem_val = st.selectbox("Semestre", ["Todos", 1, 2], index=_sem_index(), key="v2_filter_semestre")
-            st.markdown('<div class="sidebar-filter-divider"></div>', unsafe_allow_html=True)
+            semana_opts = ["Todas"] + [str(s) for s in get_semanas(ano_letivo=ano_val if ano_val != "Todos" else None, semestre=sem_val if sem_val != "Todos" else None)]
+            semana_val = st.selectbox("Semana", semana_opts, key="v2_filter_semana")
+            dias_val = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key="v2_filter_dias")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-group-header">📍 Local</div>', unsafe_allow_html=True)
+            campus_val = st.selectbox("Campus", ["Todos", "ESTG"], index=1, key="v2_filter_campus")
+            dept_val = st.selectbox("Departamento", ["Todos"] + get_departamentos(), key="v2_filter_departamento")
+            cat_val = st.selectbox("Categoria", ["Todos"] + get_categorias(), key="v2_filter_categoria_espaco")
+            edf_val = st.selectbox("Edifício", ["Todos"] + get_edificios(departamento=dept_val if dept_val != "Todos" else None), key="v2_filter_edificio")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            st.markdown('<div class="sidebar-group-header">🎯 Atividades</div>', unsafe_allow_html=True)
+            epoca_val = st.selectbox("Período/Época", ["Todos"] + get_epocas(), key="v2_filter_epoca")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
+            hide_online = st.checkbox("Excluir Online", value=False, key="v2_toggle_online")
+            hide_ghost = st.checkbox("Ocultar Ghost", value=False, key="v2_toggle_ghost")
+            hide_concurrent = st.checkbox("Deduplicar Concurrentes", value=False, key="v2_toggle_concurrent")
+            return {k: v for k, v in locals().items() if k.startswith(_FILTER_KEYS_ALL)}
+        _locals = _render()
+
+    elif profile == "Detalhe Sala":
+        def _render():
+            st.markdown('<div class="sidebar-group-header">📅 Calendário</div>', unsafe_allow_html=True)
+            ano_val = st.selectbox("Ano Letivo", ["Todos"] + _ANOS, index=_ano_index(_ANOS), key="v2_filter_ano_letivo")
+            sem_val = st.selectbox("Semestre", ["Todos", 1, 2], index=_sem_index(), key="v2_filter_semestre")
+
+            st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
             hide_online = st.checkbox("Excluir Online", value=False, key="v2_toggle_online")
             hide_ghost = st.checkbox("Ocultar Ghost", value=False, key="v2_toggle_ghost")
             return {k: v for k, v in locals().items() if k.startswith(("ano_", "sem_", "hide_"))}
@@ -176,13 +259,16 @@ with st.sidebar:
 
     elif profile == "Qualidade":
         def _render():
+            st.markdown('<div class="sidebar-group-header">📅 Calendário</div>', unsafe_allow_html=True)
             ano_val = st.selectbox("Ano Letivo", ["Todos"] + _ANOS, index=_ano_index(_ANOS), key="v2_filter_ano_letivo")
             sem_val = st.selectbox("Semestre", ["Todos", 1, 2], index=_sem_index(), key="v2_filter_semestre")
             return {k: v for k, v in locals().items() if k.startswith(("ano_", "sem_"))}
         _locals = _render()
 
+    # ── Active filters string ────────────────────────────────────
+    st.markdown(f'<div class="active-filters">{_build_active_string(_locals)}</div>', unsafe_allow_html=True)
+
     # ── Reset + User footer ──────────────────────────────────────
-    st.markdown('<div class="sidebar-filter-divider"></div>', unsafe_allow_html=True)
     st.button("Limpar Filtros", use_container_width=True, on_click=_reset_filters)
     st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
     st.markdown("---")
@@ -216,7 +302,11 @@ if profile == "Visão Geral ESTG":
     render_profile_a_general(filters)
 elif profile == "Laboratórios":
     render_profile_b_labs(filters)
-elif profile == "Espaços":
+elif profile == "Detalhe Sala":
     render_profile_c_spaces(filters)
+elif profile == "Alertas":
+    render_profile_e_alerts(filters)
+elif profile == "Comparação":
+    render_profile_f_comparison(filters)
 elif profile == "Qualidade":
     render_profile_d_quality(filters)

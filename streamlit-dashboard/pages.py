@@ -80,7 +80,7 @@ def _render_quality_card(label: str, value: int, color: str):
 # PROFILE A — General ESTG Overview
 # ═════════════════════════════════════════════════════════════════════
 def render_profile_a_general(filters: dict):
-    st.markdown("<h2 style='color:#1B2139;font-weight:700;'>Visão Geral — ESTG</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#1B2139;font-weight:700;'>Visão Geral</h2>", unsafe_allow_html=True)
 
     df = get_filtered_data(**filters)
 
@@ -379,14 +379,8 @@ def render_profile_d_quality(filters: dict):
     df = get_filtered_data(**filters)
     if not df.empty:
         st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Cobertura de Chaves Dimensionais</h4>", unsafe_allow_html=True)
-        sk_cols = {
-            "Edifício": "Edificio", "Espaço": "Nome_Espaco", "Categoria": "Categoria_Espaco",
-            "UC": "Designacao_UC", "Ciclo Estudo": "Ciclo_Estudo", "Curso": "Nome_Curso",
-            "Tipo Atividade": "Designacao_Atividade", "Responsável": "Docente_Responsavel",
-            "Estado": "Estado", "Turno": "Designacao_Turno",
-        }
         coverage = []
-        for label, col in sk_cols.items():
+        for label, col in DIMENSION_COVERAGE_COLS.items():
             if col in df.columns:
                 total = len(df)
                 filled = (df[col] != "N/D").sum()
@@ -495,7 +489,7 @@ def render_profile_e_alerts(filters: dict):
         tx_critica = 0
 
     k1, k2, k3, k4 = st.columns(4)
-    with k1: _render_kpi("Salas Ocupadas", f"{espacos_ocupados:,}", "🏢")
+    with k1: _render_kpi("Salas Ocupadas", f"{kpi_e['espacos_ocupados']:,}", "🏢")
     with k2: _render_kpi("Salas Livres", f"{espacos_livres:,}", "🟢")
     with k3: _render_kpi("Total Salas", f"{total_rooms:,}", "📐")
     with k4: _render_kpi("Tx. Crítica", f"{tx_critica}%", "🔴")

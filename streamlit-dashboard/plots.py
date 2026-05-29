@@ -72,8 +72,8 @@ def chart_ocupacao_tempo(df: pd.DataFrame, granularity: str = "Mensal") -> go.Fi
         hovertemplate="<b>%{x|%d/%m/%Y}</b><br>Total: %{y:,.0f}<extra></extra>",
     ))
     fig = _base_layout(fig, "Ocupação ao longo do tempo", height=380)
-    fig.update_xaxes(title_text="")
-    fig.update_yaxes(title_text="Nº Ocupações")
+    fig.update_xaxes(title_text="", tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -118,8 +118,8 @@ def chart_heatmap_ocupacao(df_heatmap: pd.DataFrame) -> go.Figure:
         showscale=True, colorbar=dict(title=dict(text="Ocupações", font=dict(size=11)), tickfont=dict(size=10), thickness=12, len=0.8),
     ))
     fig = _base_layout(fig, "Mapa de Calor — Ocupação por Hora", height=350)
-    fig.update_yaxes(showgrid=False, autorange="reversed")
-    fig.update_xaxes(showgrid=False, side="top")
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_xaxes(showgrid=False, side="top", tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -138,8 +138,8 @@ def chart_top_espacos(df: pd.DataFrame, top_n: int = 10) -> go.Figure:
         hovertemplate="<b>%{y}</b><br>Total: %{x:,.0f}<extra></extra>",
     ))
     fig = _base_layout(fig, f"Top {top_n} Espaços", height=400)
-    fig.update_xaxes(title_text="Nº Ocupações")
-    fig.update_yaxes(title_text="", showgrid=False)
+    fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -158,8 +158,8 @@ def chart_bottom_espacos(df: pd.DataFrame, bottom_n: int = 10) -> go.Figure:
         hovertemplate="<b>%{y}</b><br>Total: %{x:,.0f}<extra></extra>",
     ))
     fig = _base_layout(fig, f"Bottom {bottom_n} Espaços", height=400)
-    fig.update_xaxes(title_text="Nº Ocupações")
-    fig.update_yaxes(title_text="", showgrid=False)
+    fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -177,8 +177,8 @@ def chart_tipo_atividade(df: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{x}</b><br>Total: %{y:,.0f}<extra></extra>",
     ))
     fig = _base_layout(fig, "Distribuição por Tipo de Atividade", height=370)
-    fig.update_xaxes(title_text="", tickangle=-30)
-    fig.update_yaxes(title_text="Nº Ocupações")
+    fig.update_xaxes(title_text="", tickangle=-30, tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -268,8 +268,8 @@ def chart_single_space_heatmap(df: pd.DataFrame) -> go.Figure:
         colorbar=dict(title=dict(text="Sessões", font=dict(size=11)), tickfont=dict(size=10), thickness=12, len=0.8),
     ))
     fig = _base_layout(fig, "Ocupação Semanal — Sala", height=350)
-    fig.update_yaxes(showgrid=False, autorange="reversed")
-    fig.update_xaxes(showgrid=False, side="top", dtick=1)
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_xaxes(showgrid=False, side="top", dtick=1, tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -294,8 +294,8 @@ def chart_anomalies_trend(df: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{x}</b><br>Ghost: %{y}<extra></extra>",
     ))
     fig = _base_layout(fig, "Evolução de Sessões Fantasma (Ghost)", height=350)
-    fig.update_xaxes(title_text="", tickangle=-45)
-    fig.update_yaxes(title_text="Nº Ghost Sessions")
+    fig.update_xaxes(title_text="", tickangle=-45, tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="Nº Ghost Sessions", tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -436,8 +436,8 @@ def chart_critical_heatmap(
     ))
 
     fig = _base_layout(fig, "Ocupação Crítica por Horário", height=350)
-    fig.update_yaxes(showgrid=False, autorange="reversed")
-    fig.update_xaxes(showgrid=False, side="top")
+    fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_xaxes(showgrid=False, side="top", tickfont=dict(color="#334155")) # cor das labels 
     return fig
 
 
@@ -474,6 +474,6 @@ def chart_comparison_trend(rooms_dict: dict) -> go.Figure:
         ))
 
     fig = _base_layout(fig, "Comparação de Ocupação — Tendência Diária", height=400)
-    fig.update_xaxes(title_text="", tickangle=-45)
-    fig.update_yaxes(title_text="Nº Sessões")
+    fig.update_xaxes(title_text="", tickangle=-45, tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="Nº Sessões", tickfont=dict(color="#334155")) # cor das labels 
     return fig

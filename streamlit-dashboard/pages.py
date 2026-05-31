@@ -17,6 +17,7 @@ from plots import (
     chart_critical_heatmap, chart_comparison_trend,
 )
 from config import COLORS
+from calendar_chart import render_timetable_calendar
 
 
 DIMENSION_COVERAGE_COLS = {
@@ -302,8 +303,19 @@ def render_profile_c_spaces(filters: dict):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
+    # ── Calendário de Horários ────────────────────────────────────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
+    st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Calendário de Horários</h4>", unsafe_allow_html=True)
+    
+    # render_timetable_calendar devolve os dados filtrados pela vista activa
+    filtered_df = render_timetable_calendar(df)
+
+    # ── Horário Analítico (filtrado pela vista do calendário) ─────────────
+    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Horário Analítico</h4>", unsafe_allow_html=True)
-    timetable = df.sort_values(["DataCompleta", "Hora_Inicio", "Minuto_Inicio"]).copy()
+
+    timetable_df = filtered_df if filtered_df is not None and not filtered_df.empty else df
+    timetable = timetable_df.sort_values(["DataCompleta", "Hora_Inicio", "Minuto_Inicio"]).copy()
     timetable["Data"] = timetable["DataCompleta"].dt.strftime("%d/%m/%Y")
     timetable["Início"] = timetable.apply(lambda r: f"{int(r['Hora_Inicio']):02d}:{int(r['Minuto_Inicio']):02d}", axis=1)
     timetable["Fim"] = timetable.apply(lambda r: f"{int(r['Hora_Fim']):02d}:{int(r['Minuto_Fim']):02d}", axis=1)
@@ -340,8 +352,6 @@ def render_profile_c_spaces(filters: dict):
             "Estado": st.column_config.TextColumn("Estado", width="small"),
         },
     )
-
-
 # ═════════════════════════════════════════════════════════════════════
 # PROFILE D — Data Quality Audit
 # ═════════════════════════════════════════════════════════════════════

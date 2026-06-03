@@ -20,74 +20,221 @@ from pages import (
     render_profile_e_alerts, render_profile_f_comparison,
 )
 
-st.set_page_config(page_title=PAGE_TITLE, page_icon=FAVICON, layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(
+    page_title=PAGE_TITLE,
+    page_icon=FAVICON,
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
-    html, body, [data-testid="stApp"] { font-family: 'Inter', sans-serif !important; }
-    .main .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1400px; }
 
-    /* ── Sidebar aberta ── */
+    html, body, [data-testid="stApp"] {
+        font-family: 'Inter', sans-serif !important;
+    }
+
+    .main .block-container {
+        padding-top: 1rem;
+        padding-bottom: 2rem;
+        max-width: 1400px;
+    }
+
+    /* ───────────────── Sidebar fixa ───────────────── */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1B2139 0%, #141929 100%) !important;
-        min-width: 230px !important; max-width: 230px !important; width: 230px !important;
-        flex: 0 0 230px !important; display: flex; flex-direction: column; height: 100vh;
+        min-width: 230px !important;
+        max-width: 230px !important;
+        width: 230px !important;
+        flex: 0 0 230px !important;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
     }
+
     [data-testid="stSidebar"] > div:first-child {
-        display: flex; flex-direction: column; flex: 1; overflow-y: auto; min-height: 0;
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        overflow-y: auto;
+        min-height: 0;
     }
-    /* ── Sidebar fechada — colapsa a zero ── */
-    [data-testid="stSidebar"][aria-expanded="false"] {
-        min-width: 0 !important; max-width: 0 !important;
-        width: 0 !important; flex: 0 0 0 !important; overflow: hidden !important;
-    }
-    /* ── Botão de reabrir sidebar — sempre visível ── */
+
+    /* Remove TODOS os botões de collapse da sidebar */
+    button[kind="header"],
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapseButton"],
     [data-testid="stSidebarCollapsedControl"] {
-        display: flex !important;
-        visibility: visible !important;
-        position: fixed !important;
-        left: 0.5rem !important;
-        top: 0.5rem !important;
-        z-index: 9999 !important;
+        display: none !important;
+        visibility: hidden !important;
+    }
+    
+    /* Remove header/topbar vazio do Streamlit */
+    header[data-testid="stHeader"] {
+        display: none !important;
     }
 
-    [data-testid="stSidebar"] * { color: white !important; }
-    [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stCheckbox label { color: rgba(255,255,255,0.85) !important; font-size: 0.82rem !important; font-weight: 500 !important; }
+    /* Remove espaço superior que o header deixava */
+    .block-container {
+        padding-top: 5rem !important;
+    }
 
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
+    [data-testid="stSidebar"] * {
+        color: white !important;
+    }
 
-    [data-testid="stMetric"] { background: #F6F8FC; border-radius: 14px; padding: 1.2rem 1.5rem; border: 1px solid #E8EDF5; }
-    .stButton > button { border-radius: 10px !important; font-weight: 600 !important; font-size: 0.88rem !important; padding: 0.55rem 1.5rem !important; transition: all 0.2s ease !important; }
-    .stButton > button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,99,251,0.2); }
-    [data-testid="stSidebar"] .stButton button[kind="secondary"] { background: rgba(255,255,255,0.12) !important; color: white !important; border: 1px solid rgba(255,255,255,0.2) !important; }
-    [data-testid="stSidebar"] .stButton button[kind="secondary"]:hover { background: rgba(255,255,255,0.2) !important; border-color: rgba(255,255,255,0.35) !important; }
-    [data-testid="stSidebar"] .stSelectbox > div > div { border-radius: 8px !important; border-color: rgba(255,255,255,0.15) !important; background: rgba(255,255,255,0.08) !important; }
-    [data-testid="stSidebar"] .stCheckbox { margin-top: -0.4rem; }
-    .stSelectbox, .stDateInput, .stMultiSelect { font-size: 0.88rem !important; }
-    .main .stRadio > div { gap: 0.3rem !important; }
-    .main .stRadio label { border: 1px solid #E2E8F0 !important; border-radius: 8px !important; padding: 0.4rem 1rem !important; font-size: 0.82rem !important; font-weight: 500 !important; transition: all 0.2s ease !important; }
-    [data-testid="stPlotlyChart"] { background: white; border-radius: 16px; padding: 0.8rem; border: 1px solid #E8EDF5; box-shadow: 0 1px 3px rgba(0,0,0,0.04); }
-    [data-testid="stDataFrame"] { border-radius: 12px; overflow: hidden; }
-    .stDownloadButton > button { background: linear-gradient(135deg, #3B63FB, #2246D4) !important; color: white !important; border: none !important; border-radius: 10px !important; }
-    .stDownloadButton > button:hover { background: linear-gradient(135deg, #2246D4, #1A37B0) !important; transform: translateY(-1px); }
-    .sidebar-title { font-size: 1.1rem; font-weight: 800; color: white; padding: 1rem 0.5rem 0.5rem; line-height: 1.3; }
-    .sidebar-divider { border-top: 1px solid rgba(255,255,255,0.1); margin: 0.5rem 0; }
-    .dashboard-title { font-size: 1.5rem; font-weight: 800; color: #1B2139; }
-    [data-testid="stHorizontalNav"] { margin-bottom: 0.5rem; }
-    [data-testid="stHorizontalNav"] button { font-weight: 500 !important; }
+    [data-testid="stSidebar"] label,
+    [data-testid="stSidebar"] .stSelectbox label,
+    [data-testid="stSidebar"] .stCheckbox label {
+        color: rgba(255,255,255,0.85) !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+    }
+
+    #MainMenu {
+        visibility: hidden;
+    }
+
+    footer {
+        visibility: hidden;
+    }
+
+    [data-testid="stMetric"] {
+        background: #F6F8FC;
+        border-radius: 14px;
+        padding: 1.2rem 1.5rem;
+        border: 1px solid #E8EDF5;
+    }
+
+    .stButton > button {
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        font-size: 0.88rem !important;
+        padding: 0.55rem 1.5rem !important;
+        transition: all 0.2s ease !important;
+    }
+
+    .stButton > button:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(59,99,251,0.2);
+    }
+
+    [data-testid="stSidebar"] .stButton button[kind="secondary"] {
+        background: rgba(255,255,255,0.12) !important;
+        color: white !important;
+        border: 1px solid rgba(255,255,255,0.2) !important;
+    }
+
+    [data-testid="stSidebar"] .stButton button[kind="secondary"]:hover {
+        background: rgba(255,255,255,0.2) !important;
+        border-color: rgba(255,255,255,0.35) !important;
+    }
+
+    [data-testid="stSidebar"] .stSelectbox > div > div {
+        border-radius: 8px !important;
+        border-color: rgba(255,255,255,0.15) !important;
+        background: rgba(255,255,255,0.08) !important;
+    }
+
+    [data-testid="stSidebar"] .stCheckbox {
+        margin-top: -0.4rem;
+    }
+
+    .stSelectbox,
+    .stDateInput,
+    .stMultiSelect {
+        font-size: 0.88rem !important;
+    }
+
+    .main .stRadio > div {
+        gap: 0.3rem !important;
+    }
+
+    .main .stRadio label {
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        padding: 0.4rem 1rem !important;
+        font-size: 0.82rem !important;
+        font-weight: 500 !important;
+        transition: all 0.2s ease !important;
+    }
+
+    [data-testid="stPlotlyChart"] {
+        background: white;
+        border-radius: 16px;
+        padding: 0.8rem;
+        border: 1px solid #E8EDF5;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    [data-testid="stDataFrame"] {
+        border-radius: 12px;
+        overflow: hidden;
+    }
+
+    .stDownloadButton > button {
+        background: linear-gradient(135deg, #3B63FB, #2246D4) !important;
+        color: white !important;
+        border: none !important;
+        border-radius: 10px !important;
+    }
+
+    .stDownloadButton > button:hover {
+        background: linear-gradient(135deg, #2246D4, #1A37B0) !important;
+        transform: translateY(-1px);
+    }
+
+    .sidebar-title {
+        font-size: 1.1rem;
+        font-weight: 800;
+        color: white;
+        padding: 1rem 0.5rem 0.5rem;
+        line-height: 1.3;
+    }
+
+    .sidebar-divider {
+        border-top: 1px solid rgba(255,255,255,0.1);
+        margin: 0.5rem 0;
+    }
+
+    .dashboard-title {
+        font-size: 1.5rem;
+        font-weight: 800;
+        color: #1B2139;
+    }
+
+    [data-testid="stHorizontalNav"] {
+        margin-bottom: 0.5rem;
+    }
+
+    [data-testid="stHorizontalNav"] button {
+        font-weight: 500 !important;
+    }
+
     .sidebar-group-header {
-        font-size: 0.75rem; font-weight: 600; color: rgba(255,255,255,0.55);
-        text-transform: uppercase; letter-spacing: 0.06em;
-        padding: 0.6rem 0 0.2rem; margin-top: 0.1rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: rgba(255,255,255,0.55);
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        padding: 0.6rem 0 0.2rem;
+        margin-top: 0.1rem;
     }
-    .sidebar-group-divider { border-top: 1px solid rgba(255,255,255,0.06); margin: 0.4rem 0; }
+
+    .sidebar-group-divider {
+        border-top: 1px solid rgba(255,255,255,0.06);
+        margin: 0.4rem 0;
+    }
+
     .active-filters {
-        background: rgba(255,255,255,0.06); border-radius: 8px;
-        padding: 0.5rem 0.6rem; font-size: 0.72rem; color: rgba(255,255,255,0.7);
-        line-height: 1.4; margin: 0.3rem 0;
+        background: rgba(255,255,255,0.06);
+        border-radius: 8px;
+        padding: 0.5rem 0.6rem;
+        font-size: 0.72rem;
+        color: rgba(255,255,255,0.7);
+        line-height: 1.4;
+        margin: 0.3rem 0;
     }
 </style>
 """, unsafe_allow_html=True)

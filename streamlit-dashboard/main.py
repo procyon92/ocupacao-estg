@@ -27,6 +27,8 @@ st.markdown("""
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
     html, body, [data-testid="stApp"] { font-family: 'Inter', sans-serif !important; }
     .main .block-container { padding-top: 1rem; padding-bottom: 2rem; max-width: 1400px; }
+
+    /* ── Sidebar aberta ── */
     [data-testid="stSidebar"] {
         background: linear-gradient(180deg, #1B2139 0%, #141929 100%) !important;
         min-width: 230px !important; max-width: 230px !important; width: 230px !important;
@@ -35,11 +37,28 @@ st.markdown("""
     [data-testid="stSidebar"] > div:first-child {
         display: flex; flex-direction: column; flex: 1; overflow-y: auto; min-height: 0;
     }
+    /* ── Sidebar fechada — colapsa a zero ── */
+    [data-testid="stSidebar"][aria-expanded="false"] {
+        min-width: 0 !important; max-width: 0 !important;
+        width: 0 !important; flex: 0 0 0 !important; overflow: hidden !important;
+    }
+    /* ── Botão de reabrir sidebar — sempre visível ── */
+    [data-testid="stSidebarCollapsedControl"] {
+        display: flex !important;
+        visibility: visible !important;
+        position: fixed !important;
+        left: 0.5rem !important;
+        top: 0.5rem !important;
+        z-index: 9999 !important;
+    }
+
     [data-testid="stSidebar"] * { color: white !important; }
     [data-testid="stSidebar"] label, [data-testid="stSidebar"] .stSelectbox label,
     [data-testid="stSidebar"] .stCheckbox label { color: rgba(255,255,255,0.85) !important; font-size: 0.82rem !important; font-weight: 500 !important; }
-    [data-testid="collapsedControl"] { display: none; }
-    #MainMenu {visibility: hidden;} header {visibility: hidden;} footer {visibility: hidden;}
+
+    #MainMenu {visibility: hidden;}
+    footer {visibility: hidden;}
+
     [data-testid="stMetric"] { background: #F6F8FC; border-radius: 14px; padding: 1.2rem 1.5rem; border: 1px solid #E8EDF5; }
     .stButton > button { border-radius: 10px !important; font-weight: 600 !important; font-size: 0.88rem !important; padding: 0.55rem 1.5rem !important; transition: all 0.2s ease !important; }
     .stButton > button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(59,99,251,0.2); }

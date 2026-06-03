@@ -159,7 +159,7 @@ def chart_bottom_espacos(df: pd.DataFrame, bottom_n: int = 10) -> go.Figure:
     ))
     fig = _base_layout(fig, f"Bottom {bottom_n} Espaços", height=400)
     fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
-    fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155")) # cor das labels 
+    fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155"), autorange="reversed") # cor das labels 
     return fig
 
 

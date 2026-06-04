@@ -226,7 +226,7 @@ def render_profile_b_labs(filters: dict):
         else "🟡 Média" if x > summary["Sessoes"].quantile(0.5)
         else "🟢 Baixa"
     )
-    summary.columns = ["Edifício", "Laboratório", "Sessões", "Horas Totais", "Média Presenças", "Duração Média de Sessão", "Carga"]
+    summary.columns = ["Edifício", "Laboratório", "Sessões", "Horas Totais", "Média Presenças", "Duração Média por Sessão", "Carga"]
     st.dataframe(summary, use_container_width=True, hide_index=True)
     
 def _fmt_horas(h_float: float) -> str:

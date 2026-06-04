@@ -213,20 +213,26 @@ def render_profile_b_labs(filters: dict):
             Sessoes=("ID_Ocupacao", "count"),
             Horas_Total=("Duracao_Minutos", "sum"),
             Media_Presencas=("Numero_Presencas", "mean"),
-            Presencas_Total=("Numero_Presencas", "sum"),
+            Media_Horas=("Duracao_Minutos", "mean"),
         )
         .reset_index()
         .sort_values("Sessoes", ascending=False)
     )
     summary["Horas_Total"] = (summary["Horas_Total"] / 60).round(0).astype(int)
     summary["Media_Presencas"] = summary["Media_Presencas"].round(1)
+    summary["Media_Horas"] = (summary["Media_Horas"] / 60).apply(_fmt_horas)
     summary["Carga"] = summary["Sessoes"].apply(
         lambda x: "🔴 Alta" if x > summary["Sessoes"].quantile(0.75)
         else "🟡 Média" if x > summary["Sessoes"].quantile(0.5)
         else "🟢 Baixa"
     )
-    summary.columns = ["Edifício", "Laboratório", "Sessões", "Horas Totais", "Média Presenças", "Presenças Total", "Carga"]
+    summary.columns = ["Edifício", "Laboratório", "Sessões", "Horas Totais", "Média Presenças", "Média Horas", "Carga"]
     st.dataframe(summary, use_container_width=True, hide_index=True)
+    
+def _fmt_horas(h_float: float) -> str:
+    h = int(h_float)
+    m = round((h_float - h) * 60)
+    return f"{h}h {m:02d}m"
 
 
 # ═════════════════════════════════════════════════════════════════════

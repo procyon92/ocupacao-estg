@@ -286,7 +286,6 @@ _FILTER_MANIFEST = {
     "semestre":       {"key": "sem_val",     "group": "📅 Calendário",   "default": "Todos"},
     "semana":         {"key": "semana_val",  "group": "📅 Calendário",   "default": "Todas"},
     "dias":           {"key": "dias_val",    "group": "📅 Calendário",   "default": []},
-    "campus":         {"key": "campus_val",  "group": "📍 Local",        "default": "ESTG"},
     "departamento":   {"key": "dept_val",    "group": "📍 Local",        "default": "Todos"},
     "edificio":       {"key": "edf_val",     "group": "📍 Local",        "default": "Todos"},
     "categoria_espaco":{"key": "cat_val",    "group": "📍 Local",        "default": "Todos"},
@@ -305,25 +304,25 @@ _toggle_session_keys = ["v4_toggle_online", "v4_toggle_ghost", "v4_toggle_concur
 # ─── Profile widget presence ─────────────────────────────────────
 _PROFILE_WIDGETS = {
     "Visão Geral": [
-        "ano_letivo", "semestre", "semana", "dias", "campus",
+        "ano_letivo", "semestre", "semana", "dias",
         "departamento", "edificio", "categoria_espaco", "espaco",
         "ciclo_estudo", "epoca", "curso", "uc",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
     "Laboratórios": [
-        "ano_letivo", "semestre", "semana", "dias", "campus",
+        "ano_letivo", "semestre", "semana", "dias",
         "departamento", "categoria_espaco", "edificio", "espaco",
         "ciclo_estudo", "epoca", "curso", "uc",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
     "Alertas": [
-        "ano_letivo", "semestre", "semana", "dias", "campus",
+        "ano_letivo", "semestre", "semana", "dias",
         "departamento", "categoria_espaco", "edificio",
         "epoca",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
     "Comparação": [
-        "ano_letivo", "semestre", "semana", "dias", "campus",
+        "ano_letivo", "semestre", "semana", "dias",
         "departamento", "categoria_espaco", "edificio",
         "epoca",
         "hide_online", "hide_ghost", "hide_concurrent",
@@ -345,7 +344,6 @@ def _build_active_string(locals_dict):
     if d.get("sem_val", "Todos") != "Todos": parts.append(f"Sem {d['sem_val']}")
     if d.get("semana_val", "Todas") != "Todas": parts.append(f"S{d['semana_val']}")
     if d.get("dias_val", []): parts.append(f"Dias: {', '.join(d['dias_val'][:2])}{'…' if len(d['dias_val'])>2 else ''}")
-    if d.get("campus_val", "ESTG") != "Todos": parts.append("📍 ESTG")
     if d.get("edf_val", "Todos") != "Todos": parts.append(f"🏗 {d['edf_val']}")
     if d.get("cat_val", "Todos") != "Todos": parts.append(f"📐 {d['cat_val']}")
     if d.get("dept_val", "Todos") != "Todos": parts.append(f"🏛 {d['dept_val']}")
@@ -396,8 +394,6 @@ def _render_filters(profile):
             _locals[vkey] = st.selectbox("Semana", opts, key=sk)
         elif wname == "dias":
             _locals[vkey] = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key=sk)
-        elif wname == "campus":
-            _locals[vkey] = st.selectbox("Campus", ["Todos", "ESTG"], index=1, key=sk)
         elif wname == "departamento":
             _locals[vkey] = st.selectbox("Departamento", ["Todos"] + get_departamentos(), key=sk)
         elif wname == "edificio":

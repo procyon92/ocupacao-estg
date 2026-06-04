@@ -205,10 +205,10 @@ def chart_period_of_day(df: pd.DataFrame) -> go.Figure:
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
         return _base_layout(fig, "Ocupação por Período do Dia")
 
-    period_order = ["Manhã", "Tarde", "Noite", "Madrugada"]
+    period_order = ["Manhã", "Tarde", "Noite"]
     counts = df["Periodo_Dia"].value_counts().reindex(period_order, fill_value=0).reset_index()
     counts.columns = ["Periodo", "Total"]
-    colors_map = {"Manhã": "#3B63FB", "Tarde": "#F59E0B", "Noite": "#8B5CF6", "Madrugada": "#EF4444"}
+    colors_map = {"Manhã": "#3B63FB", "Tarde": "#F59E0B", "Noite": "#8B5CF6"}
 
     fig = go.Figure(data=[go.Pie(
         labels=counts["Periodo"], values=counts["Total"], hole=0.4,

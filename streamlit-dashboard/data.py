@@ -302,8 +302,7 @@ def get_filtered_data(
                 CASE
                     WHEN h1.Hora BETWEEN 8 AND 12 THEN 'Manhã'
                     WHEN h1.Hora BETWEEN 13 AND 17 THEN 'Tarde'
-                    WHEN h1.Hora BETWEEN 18 AND 20 THEN 'Noite'
-                    WHEN h1.Hora >= 21 THEN 'Madrugada'
+                    WHEN h1.Hora >= 18 THEN 'Noite'
                     ELSE 'Indefinido'
                 END AS Periodo_Dia
             FROM Facto_Ocupacao f

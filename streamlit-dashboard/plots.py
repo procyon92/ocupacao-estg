@@ -545,7 +545,7 @@ def chart_calendar_day(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
     day_df = df[df["DataCompleta"].dt.date == date.date()].copy()
     fig = go.Figure()
  
-    y_min, y_max = 8, 22
+    y_min, y_max = 8, 24
     color_map = _get_color_map(df)
  
     # Grid lines de hora em hora
@@ -562,6 +562,10 @@ def chart_calendar_day(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
         for _, row in day_df.iterrows():
             t_start = _time_to_hour(row["Hora_Inicio"], row["Minuto_Inicio"])
             t_end = _time_to_hour(row["Hora_Fim"], row["Minuto_Fim"])
+            
+            if t_end == 0.0:
+                t_end = 24.0
+                
             color = color_map.get(row.get("Designacao_UC", ""), "#3B63FB")
             label = f"{_wrap_text(str(row.get('Designacao_UC', '')), 40)}<br>" \
                     f"<span style='font-size:10px'>{row.get('Designacao_Turno', '')} · " \
@@ -599,7 +603,7 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
     fig = go.Figure()
     color_map = _get_color_map(df)
  
-    y_min, y_max = 8, 22
+    y_min, y_max = 8, 24
     n_days = len(week_dates)
  
     # Header dias
@@ -634,6 +638,10 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
         for _, row in day_df.iterrows():
             t_start = _time_to_hour(row["Hora_Inicio"], row["Minuto_Inicio"])
             t_end = _time_to_hour(row["Hora_Fim"], row["Minuto_Fim"])
+            
+            if t_end == 0.0:
+                t_end = 24.0
+                
             color = color_map.get(row.get("Designacao_UC", ""), "#3B63FB")
             duration = t_end - t_start          
             uc_short = str(row.get("Designacao_UC", ""))[:40]

@@ -249,7 +249,7 @@ nav_cols = st.columns([1, 5, 1])
 with nav_cols[0]:
     st.markdown(f"**{APP_TITLE}**")
 with nav_cols[1]:
-    profile_options = ["Visão Geral", "Laboratórios", "Detalhe Sala", "Alertas", "Comparação", "Qualidade", "Salas Vazias"]
+    profile_options = ["Visão Geral", "Laboratórios", "Detalhe Sala", "Salas Vazias", "Alertas", "Comparação", "Qualidade"]
     profile = st.segmented_control(
         "Navegação",
         options=profile_options,

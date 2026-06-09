@@ -18,6 +18,7 @@ from pages import (
     render_profile_a_general, render_profile_b_labs,
     render_profile_c_spaces, render_profile_d_quality,
     render_profile_e_alerts, render_profile_f_comparison,
+    render_profile_g_empty_rooms,
 )
 
 st.set_page_config(
@@ -248,7 +249,7 @@ nav_cols = st.columns([1, 5, 1])
 with nav_cols[0]:
     st.markdown(f"**{APP_TITLE}**")
 with nav_cols[1]:
-    profile_options = ["Visão Geral", "Laboratórios", "Detalhe Sala", "Alertas", "Comparação", "Qualidade"]
+    profile_options = ["Visão Geral", "Laboratórios", "Detalhe Sala", "Alertas", "Comparação", "Qualidade", "Salas Vazias"]
     profile = st.segmented_control(
         "Navegação",
         options=profile_options,
@@ -333,6 +334,9 @@ _PROFILE_WIDGETS = {
     ],
     "Qualidade": [
         "ano_letivo", "semestre",
+    ],
+    "Salas Vazias": [
+        "ano_letivo", "semestre", "edificio", "departamento",
     ],
 }
 
@@ -489,3 +493,5 @@ elif profile == "Comparação":
     render_profile_f_comparison(filters)
 elif profile == "Qualidade":
     render_profile_d_quality(filters)
+elif profile == "Salas Vazias":
+    render_profile_g_empty_rooms(filters)

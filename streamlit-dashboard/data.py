@@ -586,3 +586,96 @@ def get_raw_anomalies(limit: int = 100) -> pd.DataFrame:
         return df
     finally:
         conn.close()
+        
+@st.cache_data(ttl=60)
+def get_free_rooms_by_interval(
+    data_pesquisa: str,       # Formato 'YYYY-MM-DD'
+    hora_inicio: int,         # Ex: 14
+    hora_fim: int,            # Ex: 17
+    departamento: str = None,
+    edificio: str = None,
+    categoria_espaco: str = None
+) -> pd.DataFrame:
+    """
+    Retorna todas as salas que NÃO têm qualquer agendamento 
+    que se sobreponha ao intervalo entre hora_inicio e hora_fim.
+    """
+    conn = _get_connection()
+    try:
+        # 1. Parâmetros da subquery (as condições temporais)
+        subquery_where = [
+            "d.DataCompleta = %s",
+            "h1.Hora < %s",  # Hora_Inicio do evento < Hora_Fim da pesquisa
+            "h2.Hora > %s"   # Hora_Fim do evento > Hora_Inicio da pesquisa
+        ]
+        params = [data_pesquisa, hora_fim, hora_inicio]
+
+        # 2. Parâmetros da query principal (filtros geográficos/tipologia)
+        main_where = [
+            "ocupadas.SK_Espaco IS NULL",
+            "e_total.Nome_Espaco != 'N/D'",
+            "e_total.is_online != 1"
+        ]
+
+        if departamento:
+            main_where.append("e_total.Escola_Responsavel = %s")
+            params.append(departamento)
+        if edificio:
+            main_where.append("e_total.Edificio = %s")
+            params.append(edificio)
+        if categoria_espaco:
+            main_where.append("e_total.Categoria_Espaco = %s")
+            params.append(categoria_espaco)
+
+        # Montagem da Query corrigida
+        query = f"""
+            SELECT 
+                e_total.Edificio,
+                e_total.Nome_Espaco AS Sala,
+                e_total.Categoria_Espaco AS Categoria,
+                e_total.Escola_Responsavel AS Departamento
+            FROM Dim_Espaco e_total
+            LEFT JOIN (
+                SELECT DISTINCT f.SK_Espaco
+                FROM Facto_Ocupacao f
+                JOIN Dim_Data d ON f.SK_Data = d.SK_Data
+                JOIN Dim_Hora h1 ON f.SK_Hora_Inicio = h1.SK_Hora
+                JOIN Dim_Hora h2 ON f.SK_Hora_Fim = h2.SK_Hora
+                WHERE {' AND '.join(subquery_where)}
+            ) ocupadas ON e_total.SK_Espaco = ocupadas.SK_Espaco
+            WHERE {' AND '.join(main_where)}
+            ORDER BY e_total.Edificio, e_total.Nome_Espaco
+        """
+        
+        df = pd.read_sql(query, conn, params=params)
+        return df
+    finally:
+        conn.close()
+        
+@st.cache_data(ttl=300)
+def get_filtered_rooms_count(
+    departamento: str = None,
+    edificio: str = None,
+    categoria_espaco: str = None
+) -> int:
+    """Retorna o número total de espaços físicos que cumprem os filtros selecionados."""
+    conn = _get_connection()
+    try:
+        where_clauses = ["Nome_Espaco != 'N/D'", "is_online != 1"]
+        params = []
+        
+        if departamento:
+            where_clauses.append("Escola_Responsavel = %s")
+            params.append(departamento)
+        if edificio:
+            where_clauses.append("Edificio = %s")
+            params.append(edificio)
+        if categoria_espaco:
+            where_clauses.append("Categoria_Espaco = %s")
+            params.append(categoria_espaco)
+            
+        query = f"SELECT COUNT(DISTINCT Nome_Espaco) FROM Dim_Espaco WHERE {' AND '.join(where_clauses)}"
+        df = pd.read_sql(query, conn, params=params)
+        return int(df.iloc[0, 0])
+    finally:
+        conn.close()

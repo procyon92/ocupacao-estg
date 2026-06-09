@@ -8,6 +8,7 @@ from data import (
     get_etl_quality_metrics, get_ghost_sessions_trend,
     get_unmapped_records_count, get_raw_anomalies,
     get_total_rooms_count, get_occupancy_by_slot,
+    get_free_rooms_by_interval, get_filtered_rooms_count,
 )
 from plots import (
     chart_ocupacao_tempo, chart_ocupacao_edificio, chart_heatmap_ocupacao,
@@ -61,7 +62,7 @@ def _render_kpi(label: str, value: str, icon: str = ""):
                 height:110px;display:flex;flex-direction:column;justify-content:center;
                 border:1px solid #E8EDF5;">
         <span style="color:{COLORS['kpi_label']};font-size:0.82rem;font-weight:500;
-                     letter-spacing:0.02em;">{icon} {label}</span>
+                    letter-spacing:0.02em;">{icon} {label}</span>
         <span style="color:{COLORS['kpi_value']};font-size:2rem;font-weight:700;
                      line-height:1.2;margin-top:0.3rem;">{value}</span>
     </div>
@@ -90,7 +91,13 @@ def render_profile_a_general(filters: dict):
         return
 
     kpi = _compute_general_kpis(df)
-    total_rooms = get_total_rooms_count()
+    
+    # ATUALIZAÇÃO: Total de salas calculado com base nos filtros geográficos selecionados
+    total_rooms = get_filtered_rooms_count(
+        departamento=filters.get("departamento"),
+        edificio=filters.get("edificio"),
+        categoria_espaco=filters.get("categoria_espaco")
+    )
     espacos_livres = max(total_rooms - kpi["espacos_ocupados"], 0)
 
     k1, k2, k3, k4, k5, k6 = st.columns(6)
@@ -173,10 +180,18 @@ def render_profile_b_labs(filters: dict):
     avg_pres = round(total_pres / max(total_ocup, 1), 1)
     ghost_count = int((df["Numero_Presencas"] == 0).sum()) if not df.empty else 0
 
+    # ATUALIZAÇÃO: Calcula o total de laboratórios considerando também os filtros ativos na sidebar
+    total_labs = get_filtered_rooms_count(
+        departamento=filters.get("departamento"),
+        edificio=filters.get("edificio"),
+        categoria_espaco="Laboratório"
+    )
+    labs_livres = max(total_labs - labs_unicos, 0)
+
     k1, k2, k3, k4, k5 = st.columns(5)
     with k1: _render_kpi("Sessões", f"{total_ocup:,}", "🔬")
-    with k2: _render_kpi("Laboratórios", str(labs_unicos), "🖥️")
-    with k3: _render_kpi("Horas Totais", f"{total_min//60:,}h", "⏱️")
+    with k2: _render_kpi("Laboratórios Livres", str(labs_livres), "🟢")
+    with k3: _render_kpi("Laboratórios Totais", str(total_labs), "🖥️")
     with k4: _render_kpi("Média Presenças", str(avg_pres), "👥")
     with k5: _render_kpi("Sessões Vazias", f"{ghost_count:,}", "👻")
 
@@ -229,6 +244,7 @@ def render_profile_b_labs(filters: dict):
     summary.columns = ["Edifício", "Laboratório", "Sessões", "Horas Totais", "Média Presenças", "Duração Média por Sessão", "Carga"]
     st.dataframe(summary, use_container_width=True, hide_index=True)
     
+
 def _fmt_horas(h_float: float) -> str:
     h = int(h_float)
     m = round((h_float - h) * 60)
@@ -313,10 +329,9 @@ def render_profile_c_spaces(filters: dict):
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Calendário de Horários</h4>", unsafe_allow_html=True)
     
-    # render_timetable_calendar devolve os dados filtrados pela vista activa
     filtered_df = render_timetable_calendar(df)
 
-    # ── Horário Analítico (filtrado pela vista do calendário) ─────────────
+    # ── Horário Analítico ─────────────────────────────────────────────────
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Horário Analítico</h4>", unsafe_allow_html=True)
 
@@ -358,6 +373,8 @@ def render_profile_c_spaces(filters: dict):
             "Estado": st.column_config.TextColumn("Estado", width="small"),
         },
     )
+
+
 # ═════════════════════════════════════════════════════════════════════
 # PROFILE D — Data Quality Audit
 # ═════════════════════════════════════════════════════════════════════
@@ -478,7 +495,13 @@ def render_profile_e_alerts(filters: dict):
 
     # ── Fetch data ──────────────────────────────────────────────────
     df = get_filtered_data(**filters)
-    total_rooms = get_total_rooms_count()
+    
+    # ATUALIZAÇÃO: Total de salas calculado dinamicamente com base nos filtros da barra lateral
+    total_rooms = get_filtered_rooms_count(
+        departamento=filters.get("departamento"),
+        edificio=filters.get("edificio"),
+        categoria_espaco=filters.get("categoria_espaco")
+    )
 
     if df.empty:
         st.info("Sem dados para os filtros selecionados.")
@@ -617,3 +640,90 @@ def render_profile_f_comparison(filters: dict):
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Tendência Diária Comparativa</h4>", unsafe_allow_html=True)
     fig_trend = chart_comparison_trend(rooms_data)
     st.plotly_chart(fig_trend, use_container_width=True, key="chart_compare_trend")
+
+
+# ═════════════════════════════════════════════════════════════════════
+# PROFILE G — Salas Livres / Vazias (Intervalo Temporal)
+# ═════════════════════════════════════════════════════════════════════
+def render_profile_g_empty_rooms(filters: dict):
+    st.markdown("<h2 style='color:#1B2139;font-weight:700;'>Consulta de Salas Livres por Intervalo</h2>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#64748B;font-size:0.85rem;'>"
+                "Selecione o dia e o intervalo horário pretendido. A plataforma irá listar "
+                "apenas as salas que se encontram totalmente disponíveis durante todo o bloco selecionado.</p>",
+                unsafe_allow_html=True)
+
+    # ── Seleção dos Filtros Temporais ──────────────────────────────────
+    col_date, col_h_ini, col_h_fim = st.columns([2, 1, 1])
+    with col_date:
+        search_date = st.date_input(
+            "Data de Pesquisa", 
+            value=pd.to_datetime("2025-10-16").date(), 
+            format="DD/MM/YYYY",
+            key="free_search_date"
+        )
+    with col_h_ini:
+        search_hour_ini = st.selectbox(
+            "Hora de Início", 
+            options=range(8, 23), 
+            format_func=lambda h: f"{h:02d}:00 h",
+            index=1,
+            key="free_search_hour_ini"
+        )
+    with col_h_fim:
+        search_hour_fim = st.selectbox(
+            "Hora de Fim", 
+            options=range(search_hour_ini + 1, 24), 
+            format_func=lambda h: f"{h:02d}:00 h",
+            index=1,
+            key="free_search_hour_fim"
+        )
+
+    # ── Obtenção dos Dados Filtrados do Data Warehouse ────────────────
+    dep = filters.get("departamento")
+    edi = filters.get("edificio")
+    cat = filters.get("categoria_espaco")
+
+    df_free = get_free_rooms_by_interval(
+        data_pesquisa=str(search_date),
+        hora_inicio=search_hour_ini,
+        hora_fim=search_hour_fim,
+        departamento=dep,
+        edificio=edi,
+        categoria_espaco=cat
+    )
+
+    # Total de salas calculado dinamicamente com base no filtro ativo da sidebar
+    total_rooms = get_filtered_rooms_count(departamento=dep, edificio=edi, categoria_espaco=cat)
+    
+    vazias_count = len(df_free)
+    ocupadas_count = max(total_rooms - vazias_count, 0)
+    tx_disponibilidade = round((vazias_count / max(total_rooms, 1)) * 100, 1)
+
+    # ── Grid de KPIs Visualmente Alinhada ──────────────────────────────
+    k1, k2, k3, k4 = st.columns(4)
+    with k1: _render_kpi("Salas Vazias", f"{vazias_count:,}", "🟢")
+    with k2: _render_kpi("Salas Ocupadas", f"{ocupadas_count:,}", "🏢")
+    with k3: _render_kpi("Total de Espaços", f"{total_rooms:,}", "📐")
+    with k4: _render_kpi("Disponibilidade", f"{tx_disponibilidade}%", "📊")
+
+    st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
+
+    # ── Output dos Resultados ─────────────────────────────────────────
+    data_formatada_pt = search_date.strftime('%d/%m/%Y')
+    st.markdown(f"<h4 style='color:#1B2139;font-weight:700;'>Salas livres para {data_formatada_pt} entre as {search_hour_ini:02d}:00 e as {search_hour_fim:02d}:00</h4>", unsafe_allow_html=True)
+
+    if not df_free.empty:
+        st.dataframe(
+            df_free,
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Edificio": st.column_config.TextColumn("Edifício", width="medium"),
+                "Sala": st.column_config.TextColumn("Sala / Espaço", width="medium"),
+                "Categoria": st.column_config.TextColumn("Tipologia", width="medium"),
+                "Departamento": st.column_config.TextColumn("Escola / Departamento", width="large"),
+            }
+        )
+        st.caption(f"💡 Foram encontradas {vazias_count} salas completamente disponíveis de um universo de {total_rooms} espaços visíveis.")
+    else:
+        st.warning("⚠️ Não existem salas totalmente livres que cubram todo este intervalo de tempo com os filtros atuais.")

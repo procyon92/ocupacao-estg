@@ -287,7 +287,7 @@ _FILTER_MANIFEST = {
     "semestre":       {"key": "sem_val",     "group": "📅 Calendário",   "default": "Todos"},
     "semana":         {"key": "semana_val",  "group": "📅 Calendário",   "default": "Todas"},
     "dias":           {"key": "dias_val",    "group": "📅 Calendário",   "default": []},
-    "departamento":   {"key": "dept_val",    "group": "📍 Local",        "default": "Todos"},
+    "escola":         {"key": "dept_val",    "group": "📍 Local",        "default": "Todos"},
     "edificio":       {"key": "edf_val",     "group": "📍 Local",        "default": "Todos"},
     "categoria_espaco":{"key": "cat_val",    "group": "📍 Local",        "default": "Todos"},
     "espaco":         {"key": "esp_val",     "group": "📍 Local",        "default": "Todos"},
@@ -306,25 +306,25 @@ _toggle_session_keys = ["v4_toggle_online", "v4_toggle_ghost", "v4_toggle_concur
 _PROFILE_WIDGETS = {
     "Visão Geral": [
         "ano_letivo", "semestre", "semana", "dias",
-        "departamento", "edificio", "categoria_espaco", "espaco",
+        "escola", "edificio", "categoria_espaco", "espaco",
         "ciclo_estudo", "epoca", "curso", "uc",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
     "Laboratórios": [
         "ano_letivo", "semestre", "semana", "dias",
-        "departamento", "categoria_espaco", "edificio", "espaco",
+        "escola", "categoria_espaco", "edificio", "espaco",
         "ciclo_estudo", "epoca", "curso", "uc",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
     "Alertas": [
         "ano_letivo", "semestre", "semana", "dias",
-        "departamento", "categoria_espaco", "edificio",
+        "escola", "categoria_espaco", "edificio",
         "epoca",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
     "Comparação": [
         "ano_letivo", "semestre", "semana", "dias",
-        "departamento", "categoria_espaco", "edificio",
+        "escola", "categoria_espaco", "edificio",
         "epoca",
         "hide_online", "hide_ghost", "hide_concurrent",
     ],
@@ -336,7 +336,7 @@ _PROFILE_WIDGETS = {
         "ano_letivo", "semestre",
     ],
     "Salas Vazias": [
-        "ano_letivo", "semestre", "edificio", "departamento",
+        "ano_letivo", "semestre", "edificio", "escola",
     ],
 }
 
@@ -398,8 +398,8 @@ def _render_filters(profile):
             _locals[vkey] = st.selectbox("Semana", opts, key=sk)
         elif wname == "dias":
             _locals[vkey] = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key=sk)
-        elif wname == "departamento":
-            _locals[vkey] = st.selectbox("Departamento", ["Todos"] + get_departamentos(), key=sk)
+        elif wname == "escola":
+            _locals[vkey] = st.selectbox("Escola", ["Todos"] + get_departamentos(), key=sk)
         elif wname == "edificio":
             dept = _locals.get("dept_val", "Todos")
             dept = dept if dept != "Todos" else None

@@ -33,10 +33,10 @@ class DataLoader:
         """Garante a existência do registo SK=0 em todas as dimensões com base no novo DDL."""
         self.logger.info("A inserir/validar Dummies (SK=0)...")
         queries = [
-            "INSERT IGNORE INTO Dim_Data (SK_Data, DataCompleta, Ano, Ano_Escolar, Mes, Numero_Semana, Dia, DiaSemana, Semestre, Tipo_Dia) VALUES (0, '1900-01-01', 1900, 'N/D', 1, 0, 1, 'N/D', 0, 'N/D')",
+            "INSERT IGNORE INTO Dim_Data (SK_Data, DataCompleta, Ano, Ano_Escolar, Mes, Numero_Semana, Dia, DiaSemana, Semestre, Tipo_Dia, Numero_Semana_Escolar) VALUES (0, '1900-01-01', 1900, 'N/D', 1, 0, 1, 'N/D', 0, 'N/D', 0)",
             "INSERT IGNORE INTO Dim_Hora (SK_Hora, Hora, Minuto) VALUES (0, 0, 0)",
             "INSERT IGNORE INTO Dim_Epoca (SK_Epoca, Descricao_Epoca) VALUES (0, 'N/D')",
-            "INSERT IGNORE INTO Dim_Espaco (SK_Espaco, Edificio, Nome_Espaco, Categoria_Espaco, Escola_Responsavel, is_online, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', 'N/D', 'N/D', 0, '1900-01-01', '9999-12-31', 1)",
+            "INSERT IGNORE INTO Dim_Espaco (SK_Espaco, Edificio, Nome_Espaco, Categoria_Espaco, Escola_Responsavel, is_online, Departamento, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', 'N/D', 'N/D', 0, 'N/D', '1900-01-01', '9999-12-31', 1)",
             "INSERT IGNORE INTO Dim_Unidade_Curricular (SK_Unidade_Curricular, Codigo_UC, Designacao_UC, Ciclo_Estudo, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', 'N/D', '1900-01-01', '9999-12-31', 1)",
             "INSERT IGNORE INTO Dim_Curso (SK_Curso, Codigo_Curso, Nome_Curso, Valid_From, Valid_To, Is_Active) VALUES (0, 'N/D', 'N/D', '1900-01-01', '9999-12-31', 1)",
             "INSERT IGNORE INTO Dim_Responsavel (SK_Responsavel, Docente_Responsavel) VALUES (0, 'N/D')",

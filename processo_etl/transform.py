@@ -15,7 +15,8 @@ class DataTransformer:
     # =================================================================
     # 1. GERAÇÃO AUTÓNOMA DE DIMENSÕES ESTÁTICAS
     # =================================================================
-    def build_date_dimension(self, start_date='2018-01-01', end_date='2035-12-31') -> pd.DataFrame:
+    def build_date_dimension(self, start_date='2018-01-01', end_date='2035-12-31',
+                             sem1_start='09-01', sem2_start='03-01') -> pd.DataFrame:
         self.logger.info(f"A gerar Dim_Data ({start_date} a {end_date})...")
         date_range = pd.date_range(start=start_date, end=end_date)
         df = pd.DataFrame({'DataCompleta': date_range})
@@ -34,6 +35,21 @@ class DataTransformer:
         df['Semestre'] = df['Mes'].apply(
             lambda m: 1 if m in [9,10,11,12,1,2] else (2 if m in [3,4,5,6,7] else 0)
         )
+
+        def _escolar_week(row):
+            if row['Semestre'] == 0:
+                return 0
+            ano_ref = row['Ano']
+            if row['Semestre'] == 1 and row['Mes'] <= 2:
+                ano_ref = row['Ano'] - 1
+            elif row['Semestre'] == 2 and row['Mes'] >= 8:
+                ano_ref = row['Ano'] + 1
+            ref_str = sem1_start if row['Semestre'] == 1 else sem2_start
+            ref_date = pd.Timestamp(f"{ano_ref}-{ref_str}")
+            delta = pd.Timestamp(row['DataCompleta']) - ref_date
+            return max(int(delta.days / 7) + 1, 0)
+
+        df['Numero_Semana_Escolar'] = df.apply(_escolar_week, axis=1)
 
         day_map = {0:'Segunda-feira',1:'Terça-feira',2:'Quarta-feira',
                    3:'Quinta-feira',4:'Sexta-feira',5:'Sábado',6:'Domingo'}
@@ -161,7 +177,7 @@ class DataTransformer:
             nome_upper = df[esp_col].astype(str).str.upper()
             conditions = [
                 nome_upper.str.contains('LAB', na=False) | nome_upper.str.match(r'^L', na=False),
-                nome_upper.str.contains('ANFITEATRO', na=False),
+                nome_upper.str.contains(r'\bANFITEATRO\b|\bAF\d*\b|\bANF\d*\b', na=False),
                 nome_upper.str.contains('AUDITORIO|AUDIT\u00d3RIO', na=False),
                 nome_upper.str.contains('GAB', na=False),
             ]
@@ -194,6 +210,27 @@ class DataTransformer:
             df['descricao_epoca'] = np.select(conditions, choices, default='Período Letivo')
         else:
             df['descricao_epoca'] = 'N/D'
+        return df
+
+    def _classify_departamento(self, df: pd.DataFrame) -> pd.DataFrame:
+        esp_col = next((c for c in ['espaco', 'nome_espaco'] if c in df.columns), None)
+        if esp_col:
+            nome_upper = df[esp_col].astype(str).str.upper()
+            siglas = ['DCL', 'DCJ', 'DEC', 'DEE', 'DEI', 'DEM', 'DGE', 'DMAT']
+            depts = [
+                'Departamento de Ciências da Linguagem',
+                'Departamento de Ciências Jurídicas',
+                'Departamento de Engenharia Civil',
+                'Departamento de Engenharia Eletrotécnica',
+                'Departamento de Engenharia Informática',
+                'Departamento de Engenharia Mecânica',
+                'Departamento de Gestão e Economia',
+                'Departamento de Matemática',
+            ]
+            conditions = [nome_upper.str.contains(rf'\b{s}\b', na=False) for s in siglas]
+            df['departamento'] = np.select(conditions, depts, default='N/D')
+        else:
+            df['departamento'] = 'N/D'
         return df
 
     # =================================================================
@@ -338,7 +375,9 @@ class DataTransformer:
             'designacao_unidade_curricular': 'SEM_UNIDADE / RESERVA_ADMIN',
             'unidade_respon': 'Indefinido/N.D.', 'unidade_responsavel': 'Indefinido/N.D.',
             'pessoa_resp': 'Indefinido/N.D.', 'nome_curso': 'N/D', 'codigo_curso': 'N/D',
-            'descricao_epoca': 'N/D'
+            'descricao_epoca': 'N/D',
+            'departamento': 'N/D',
+            'Departamento': 'N/D'
         }
         for col, default in impute_map.items():
             if col in df.columns:
@@ -380,7 +419,8 @@ class DataTransformer:
             'presencas': 'Numero_Presencas',
             'is_online': 'is_online',
             'categoria_espaco': 'Categoria_Espaco',
-            'descricao_epoca': 'Descricao_Epoca'
+            'descricao_epoca': 'Descricao_Epoca',
+            'departamento': 'Departamento'
         }
 
         if 'codigo_unidade_curricular' in df.columns:
@@ -421,6 +461,7 @@ class DataTransformer:
         df_main = self._apply_business_filters(df_main)
         df_main = self._classify_espaco(df_main)
         df_main = self._classify_epoca(df_main)
+        df_main = self._classify_departamento(df_main)
 
         if df_cursos is not None:
             df_main = self._merge_course_data(df_main, df_cursos)

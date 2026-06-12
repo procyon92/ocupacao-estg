@@ -1,0 +1,55 @@
+# AGENTS.md — ETL Ocupação ESTG
+
+## Directory layout
+
+```
+/                     Run all commands from root (not subdirs)
+  processo_etl/        ETL pipeline: main.py, extract.py, transform.py, load.py, cleanup_dw.py
+  streamlit-dashboard/ Streamlit BI app: streamlit run streamlit-dashboard/main.py
+  database/            schema_dw.sql (MySQL DDL), dw_ocupacao.db (SQLite artifact)
+  docs/                Project PDFs, XLSX, DOCX (not code)
+  dados/               Input CSVs/SQL (gitignored)
+  .env                 DB credentials (gitignored, shared by ETL + dashboard)
+```
+
+## Before first run
+
+1. Execute `database/schema_dw.sql` against **MySQL 8.0+**
+2. Copy `.env.example` → `.env` and fill credentials
+3. Place input files in `dados/`
+
+## Key commands (always from repo root)
+
+```bash
+pip install pandas sqlalchemy pymysql python-dotenv                             # ETL deps
+pip install -r streamlit-dashboard/requirements.txt                              # Dashboard deps
+python processo_etl/cleanup_dw.py                                               # Truncate + reinsert SK=0 dummies
+python processo_etl/main.py                                                     # Run full ETL
+streamlit run streamlit-dashboard/main.py                                       # Launch dashboard
+```
+
+## Execution quirks
+
+- **All commands must run from repo root**: `.env` and `dados/` paths are relative to CWD
+- **No test framework, no linter, no type checker** configured
+- **CSV encodings vary**: `cp1252` for PorSalaTurno/PorTurnoPresencas; `latin-1` for `curso_ucs(in).csv`; `utf-8` for SQL dump
+- **Dashboard auth**: default creds `admin/estg2025` or `docente/estg2025` (hardcoded in `streamlit-dashboard/config.py`)
+
+## Schema alignment — corrected
+
+All schema drifts and code misalignments have been resolved:
+- Dummy INSERTs in `cleanup_dw.py` updated to match `schema_dw.sql` (column names, SCD2 daterange columns, missing tables)
+- `main.py` correctly calls `load_fixed_pk_dimension`, `load_dimension_scd1`, and `load_dimension_scd2`; `target_table_name` set to `"turnos"` with 13 expected columns
+- T_CLEAN rules implemented in `transform.py`: `_flag_reserva_sem_uc`, outlier duration logging, ghost session logging
+
+## Dimension SCD strategy
+
+| SCD Type | Dimensions |
+|---|---|
+| **SCD2** | Dim_Espaco, Dim_Unidade_Curricular, Dim_Curso |
+| **SCD1** | Dim_Responsavel, Dim_Turno, Dim_Tipo_Atividade, Dim_Estado_Agendamento, Dim_Epoca |
+
+## Load quirks
+
+- Fact insert disables `FOREIGN_KEY_CHECKS`, batches of 5000, re-enables
+- SK=0 dummy insert requires `SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO'` set first

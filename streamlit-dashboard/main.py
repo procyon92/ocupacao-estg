@@ -10,7 +10,7 @@ from datetime import datetime
 from config import APP_TITLE, PAGE_TITLE, FAVICON
 from auth import check_auth, login_page, logout
 from data import (
-    get_anos_letivos, get_departamentos, get_edificios,
+    get_anos_letivos, get_departamentos, get_escolas, get_edificios,
     get_categorias, get_espacos, get_ciclos_estudo, get_cursos, get_ucs,
     get_epocas, get_dias_semana, get_semanas,
 )
@@ -283,21 +283,22 @@ def _sem_index():
 
 # ─── Widget manifest ─────────────────────────────────────────────
 _FILTER_MANIFEST = {
-    "ano_letivo":     {"key": "ano_val",     "group": "📅 Calendário",   "default": "Todos"},
-    "semestre":       {"key": "sem_val",     "group": "📅 Calendário",   "default": "Todos"},
-    "semana":         {"key": "semana_val",  "group": "📅 Calendário",   "default": "Todas"},
-    "dias":           {"key": "dias_val",    "group": "📅 Calendário",   "default": []},
-    "escola":         {"key": "dept_val",    "group": "📍 Local",        "default": "Todos"},
-    "edificio":       {"key": "edf_val",     "group": "📍 Local",        "default": "Todos"},
-    "categoria_espaco":{"key": "cat_val",    "group": "📍 Local",        "default": "Todos"},
-    "espaco":         {"key": "esp_val",     "group": "📍 Local",        "default": "Todos"},
-    "ciclo_estudo":   {"key": "ciclo_val",   "group": "🎯 Atividades",   "default": "Todos"},
-    "epoca":          {"key": "epoca_val",   "group": "🎯 Atividades",   "default": "Todos"},
-    "curso":          {"key": "curso_val",   "group": "🎯 Atividades",   "default": "Todos"},
-    "uc":             {"key": "uc_val",      "group": "🎯 Atividades",   "default": "Todos"},
-    "hide_online":    {"key": "hide_online", "group": "toggles",         "default": False},
-    "hide_ghost":     {"key": "hide_ghost",  "group": "toggles",         "default": False},
-    "hide_concurrent":{"key": "hide_concurrent","group": "toggles",      "default": False},
+    "ano_letivo":      {"key": "ano_val",     "group": "📅 Calendário",  "default": "Todos"},
+    "semestre":        {"key": "sem_val",     "group": "📅 Calendário",  "default": "Todos"},
+    "semana":          {"key": "semana_val",  "group": "📅 Calendário",  "default": "Todas"},
+    "dias":            {"key": "dias_val",    "group": "📅 Calendário",  "default": []},
+    "escola":          {"key": "esc_val",     "group": "📍 Local",       "default": "Todos"},
+    "departamento":    {"key": "dep_val",     "group": "📍 Local",       "default": "Todos"},
+    "edificio":        {"key": "edf_val",     "group": "📍 Local",       "default": "Todos"},
+    "categoria_espaco":{"key": "cat_val",     "group": "📍 Local",       "default": "Todos"},
+    "espaco":          {"key": "esp_val",     "group": "📍 Local",       "default": "Todos"},
+    "ciclo_estudo":    {"key": "ciclo_val",   "group": "🎯 Atividades",  "default": "Todos"},
+    "epoca":           {"key": "epoca_val",   "group": "🎯 Atividades",  "default": "Todos"},
+    "curso":           {"key": "curso_val",   "group": "🎯 Atividades",  "default": "Todos"},
+    "uc":              {"key": "uc_val",      "group": "🎯 Atividades",  "default": "Todos"},
+    "hide_online":     {"key": "hide_online", "group": "toggles",        "default": False},
+    "hide_ghost":      {"key": "hide_ghost",  "group": "toggles",        "default": False},
+    "hide_concurrent": {"key": "hide_concurrent", "group": "toggles",   "default": False},
 }
 
 _toggle_session_keys = ["v4_toggle_online", "v4_toggle_ghost", "v4_toggle_concurrent"]
@@ -330,13 +331,15 @@ _PROFILE_WIDGETS = {
     ],
     "Detalhe Sala": [
         "ano_letivo", "semestre",
+        "escola", "edificio", "departamento",
         "hide_online", "hide_ghost",
     ],
     "Qualidade": [
         "ano_letivo", "semestre",
     ],
     "Salas Vazias": [
-        "ano_letivo", "semestre", "edificio", "escola",
+        "ano_letivo", "semestre",
+        "escola", "departamento", "edificio",
     ],
 }
 
@@ -348,9 +351,10 @@ def _build_active_string(locals_dict):
     if d.get("sem_val", "Todos") != "Todos": parts.append(f"Sem {d['sem_val']}")
     if d.get("semana_val", "Todas") != "Todas": parts.append(f"S{d['semana_val']}")
     if d.get("dias_val", []): parts.append(f"Dias: {', '.join(d['dias_val'][:2])}{'…' if len(d['dias_val'])>2 else ''}")
+    if d.get("esc_val", "Todos") != "Todos": parts.append(f"🏛 {d['esc_val']}")
+    if d.get("dep_val", "Todos") != "Todos": parts.append(f"🏢 {d['dep_val']}") 
     if d.get("edf_val", "Todos") != "Todos": parts.append(f"🏗 {d['edf_val']}")
     if d.get("cat_val", "Todos") != "Todos": parts.append(f"📐 {d['cat_val']}")
-    if d.get("dept_val", "Todos") != "Todos": parts.append(f"🏛 {d['dept_val']}")
     if d.get("ciclo_val", "Todos") != "Todos": parts.append(f"🎓 {d['ciclo_val']}")
     if d.get("epoca_val", "Todos") != "Todos": parts.append(f"📆 {d['epoca_val']}")
     return " | ".join(parts) if parts else "Sem filtros ativos"
@@ -394,16 +398,24 @@ def _render_filters(profile):
         elif wname == "semana":
             ano = _locals.get("ano_val", "Todos")
             sem = _locals.get("sem_val", "Todos")
-            opts = ["Todas"] + [str(s) for s in get_semanas(ano_letivo=ano if ano != "Todos" else None, semestre=sem if sem != "Todos" else None)]
+            opts = ["Todas"] + [str(s) for s in get_semanas(
+                ano_letivo=ano if ano != "Todos" else None,
+                semestre=sem if sem != "Todos" else None,
+            )]
             _locals[vkey] = st.selectbox("Semana", opts, key=sk)
         elif wname == "dias":
             _locals[vkey] = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key=sk)
         elif wname == "escola":
-            _locals[vkey] = st.selectbox("Escola", ["Todos"] + get_departamentos(), key=sk)
+            _locals[vkey] = st.selectbox("Escola", ["Todos"] + get_escolas(), key=sk)
+        elif wname == "departamento":
+            dept_map = get_departamentos()  # {"Engenharia Informática": "Departamento de Engenharia Informática"}
+            labels = ["Todos"] + list(dept_map.keys())
+            selected_label = st.selectbox("Departamento", labels, key=sk)
+            _locals[vkey] = dept_map.get(selected_label, "Todos") if selected_label != "Todos" else "Todos"
         elif wname == "edificio":
-            dept = _locals.get("dept_val", "Todos")
-            dept = dept if dept != "Todos" else None
-            opts = ["Todos"] + get_edificios(departamento=dept, only_labs=is_lab)
+            esc = _locals.get("esc_val", "Todos")
+            esc = esc if esc != "Todos" else None
+            opts = ["Todos"] + get_edificios(escola=esc, only_labs=is_lab)
             _locals[vkey] = st.selectbox("Edifício", opts, key=sk)
         elif wname == "categoria_espaco":
             if is_lab:
@@ -413,7 +425,11 @@ def _render_filters(profile):
         elif wname == "espaco":
             edf = _locals.get("edf_val", "Todos")
             cat = _locals.get("cat_val", "Todos")
-            opts = ["Todos"] + get_espacos(edificio=edf if edf != "Todos" else None, categoria=cat if cat != "Todos" else None, only_labs=is_lab)
+            opts = ["Todos"] + get_espacos(
+                edificio=edf if edf != "Todos" else None,
+                categoria=cat if cat != "Todos" else None,
+                only_labs=is_lab,
+            )
             _locals[vkey] = st.selectbox("Sala", opts, key=sk)
         elif wname == "ciclo_estudo":
             _locals[vkey] = st.selectbox("Ciclo Estudo", ["Todos"] + get_ciclos_estudo(only_labs=is_lab), key=sk)
@@ -438,16 +454,17 @@ def _render_filters(profile):
 # ─── Build filters dict from widget locals ───────────────────────
 def _extract_filters(locals_dict):
     f = {}
-    if locals_dict.get("ano_val", "Todos") != "Todos": f["ano_letivo"] = locals_dict["ano_val"]
-    if locals_dict.get("sem_val", "Todos") != "Todos": f["semestre"] = int(locals_dict["sem_val"])
-    if locals_dict.get("dept_val", "Todos") != "Todos": f["departamento"] = locals_dict["dept_val"]
-    if locals_dict.get("cat_val", "Todos") != "Todos": f["categoria_espaco"] = locals_dict["cat_val"]
-    if locals_dict.get("edf_val", "Todos") != "Todos": f["edificio"] = locals_dict["edf_val"]
-    if locals_dict.get("esp_val", "Todos") != "Todos": f["espaco"] = locals_dict["esp_val"]
-    if locals_dict.get("ciclo_val", "Todos") != "Todos": f["ciclo_estudo"] = locals_dict["ciclo_val"]
-    if locals_dict.get("curso_val", "Todos") != "Todos": f["curso"] = locals_dict["curso_val"]
-    if locals_dict.get("uc_val", "Todos") != "Todos": f["uc"] = locals_dict["uc_val"]
-    if locals_dict.get("epoca_val", "Todos") != "Todos": f["epoca"] = locals_dict["epoca_val"]
+    if locals_dict.get("ano_val", "Todos") != "Todos":    f["ano_letivo"] = locals_dict["ano_val"]
+    if locals_dict.get("sem_val", "Todos") != "Todos":    f["semestre"] = int(locals_dict["sem_val"])
+    if locals_dict.get("esc_val", "Todos") != "Todos":    f["escola"] = locals_dict["esc_val"]
+    if locals_dict.get("dep_val", "Todos") != "Todos":    f["departamento"] = locals_dict["dep_val"]
+    if locals_dict.get("cat_val", "Todos") != "Todos":    f["categoria_espaco"] = locals_dict["cat_val"]
+    if locals_dict.get("edf_val", "Todos") != "Todos":    f["edificio"] = locals_dict["edf_val"]
+    if locals_dict.get("esp_val", "Todos") != "Todos":    f["espaco"] = locals_dict["esp_val"]
+    if locals_dict.get("ciclo_val", "Todos") != "Todos":  f["ciclo_estudo"] = locals_dict["ciclo_val"]
+    if locals_dict.get("curso_val", "Todos") != "Todos":  f["curso"] = locals_dict["curso_val"]
+    if locals_dict.get("uc_val", "Todos") != "Todos":     f["uc"] = locals_dict["uc_val"]
+    if locals_dict.get("epoca_val", "Todos") != "Todos":  f["epoca"] = locals_dict["epoca_val"]
     f["hide_online"] = locals_dict.get("hide_online", False)
     f["hide_concurrent"] = locals_dict.get("hide_concurrent", False)
     f["hide_ghost"] = locals_dict.get("hide_ghost", False)
@@ -462,10 +479,8 @@ with st.sidebar:
     _locals = {}
     _render_filters(profile)
 
-    # ── Active filters string ────────────────────────────────────
     st.markdown(f'<div class="active-filters">{_build_active_string(_locals)}</div>', unsafe_allow_html=True)
 
-    # ── Reset + User footer ──────────────────────────────────────
     st.button("Limpar Filtros", use_container_width=True, on_click=_reset_filters)
     st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
     st.markdown("---")

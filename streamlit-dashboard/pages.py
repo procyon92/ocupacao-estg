@@ -9,6 +9,7 @@ from data import (
     get_unmapped_records_count, get_raw_anomalies,
     get_total_rooms_count, get_occupancy_by_slot,
     get_free_rooms_by_interval, get_filtered_rooms_count,
+    get_departamentos, get_escolas,
 )
 from plots import (
     chart_ocupacao_tempo, chart_ocupacao_edificio, chart_heatmap_ocupacao,
@@ -19,6 +20,7 @@ from plots import (
 )
 from config import COLORS
 from calendar_chart import render_timetable_calendar
+from datetime import datetime
 
 
 DIMENSION_COVERAGE_COLS = {
@@ -91,12 +93,11 @@ def render_profile_a_general(filters: dict):
         return
 
     kpi = _compute_general_kpis(df)
-    
-    # ATUALIZAÇÃO: Total de salas calculado com base nos filtros geográficos selecionados
+
     total_rooms = get_filtered_rooms_count(
-        departamento=filters.get("departamento"),
+        escola=filters.get("escola"),
         edificio=filters.get("edificio"),
-        categoria_espaco=filters.get("categoria_espaco")
+        categoria_espaco=filters.get("categoria_espaco"),
     )
     espacos_livres = max(total_rooms - kpi["espacos_ocupados"], 0)
 
@@ -110,7 +111,6 @@ def render_profile_a_general(filters: dict):
 
     st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
-    # ── Top / Bottom N with slider ───────────────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Top / Bottom Espaços</h4>", unsafe_allow_html=True)
     top_n = st.slider("Número de espaços", min_value=5, max_value=30, value=10, key="v2_top_n")
     col_top, col_bottom = st.columns(2)
@@ -123,7 +123,6 @@ def render_profile_a_general(filters: dict):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Time Analysis: Trend + Period of Day ────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Análise Temporal</h4>", unsafe_allow_html=True)
     col_trend, col_period = st.columns([2, 1])
     with col_trend:
@@ -137,7 +136,6 @@ def render_profile_a_general(filters: dict):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Weekday × Hour Heatmap + Building Donut ──────────────────────
     col_heat, col_donut = st.columns([2, 1])
     with col_heat:
         fig_heat = chart_heatmap_ocupacao(_build_heatmap_data(df))
@@ -148,7 +146,6 @@ def render_profile_a_general(filters: dict):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Category + Activity Type ─────────────────────────────────────
     col_cat, col_atv = st.columns(2)
     with col_cat:
         fig_cat = chart_categoria_espaco(df)
@@ -162,11 +159,26 @@ def render_profile_a_general(filters: dict):
 # PROFILE B — Computer Labs Dashboard
 # ═════════════════════════════════════════════════════════════════════
 def render_profile_b_labs(filters: dict):
-    st.markdown("<h2 style='color:#1B2139;font-weight:700;'>Laboratórios de Informática</h2>", unsafe_allow_html=True)
+    st.markdown("<h2 style='color:#1B2139;font-weight:700;'>Laboratórios</h2>", unsafe_allow_html=True)
     st.markdown("<p style='color:#64748B;font-size:0.85rem;'>Filtro automático: Categoria = Laboratório. "
                 "Os restantes filtros podem ser ajustados livremente.</p>", unsafe_allow_html=True)
 
     filters["only_labs"] = True
+
+    dept_map = get_departamentos()
+    dept_labels = list(dept_map.keys())
+    DEFAULT_LABEL = "Engenharia Informática"
+    label_opts = ["— Todos os departamentos —"] + dept_labels
+    default_idx = label_opts.index(DEFAULT_LABEL) if DEFAULT_LABEL in label_opts else 0
+
+    selected_label = st.selectbox("Departamento", options=label_opts, index=default_idx, key="v2_lab_dept_select")
+    selected_dept_value = dept_map.get(selected_label) if selected_label != "— Todos os departamentos —" else None
+
+    if selected_dept_value:
+        filters["departamento"] = selected_dept_value
+    elif "departamento" in filters:
+        filters.pop("departamento")
+
     df = get_filtered_data(**filters)
 
     if df.empty:
@@ -174,17 +186,16 @@ def render_profile_b_labs(filters: dict):
         return
 
     total_ocup = len(df)
-    labs_unicos = df["Nome_Espaco"].nunique() if not df.empty else 0
-    total_min = int(df["Duracao_Minutos"].sum()) if not df.empty else 0
-    total_pres = int(df["Numero_Presencas"].sum()) if not df.empty else 0
+    labs_unicos = df["Nome_Espaco"].nunique()
+    total_pres = int(df["Numero_Presencas"].sum())
     avg_pres = round(total_pres / max(total_ocup, 1), 1)
-    ghost_count = int((df["Numero_Presencas"] == 0).sum()) if not df.empty else 0
+    ghost_count = int((df["Numero_Presencas"] == 0).sum())
 
-    # ATUALIZAÇÃO: Calcula o total de laboratórios considerando também os filtros ativos na sidebar
     total_labs = get_filtered_rooms_count(
-        departamento=filters.get("departamento"),
+        escola=filters.get("escola"),
         edificio=filters.get("edificio"),
-        categoria_espaco="Laboratório"
+        categoria_espaco="Laboratório",
+        departamento=filters.get("departamento") if selected_label != "— Todos os departamentos —" else None,
     )
     labs_livres = max(total_labs - labs_unicos, 0)
 
@@ -243,7 +254,7 @@ def render_profile_b_labs(filters: dict):
     )
     summary.columns = ["Edifício", "Laboratório", "Sessões", "Horas Totais", "Média Presenças", "Duração Média por Sessão", "Carga"]
     st.dataframe(summary, use_container_width=True, hide_index=True)
-    
+
 
 def _fmt_horas(h_float: float) -> str:
     h = int(h_float)
@@ -263,17 +274,13 @@ def render_profile_c_spaces(filters: dict):
     all_rooms = get_espacos(
         edificio=filters.get("edificio"),
         categoria=filters.get("categoria_espaco"),
+        departamento=filters.get("departamento"),
     )
     room_opts = ["— Selecione um espaço —"] + all_rooms
     idx = 0
     if global_espaco and global_espaco in all_rooms:
         idx = room_opts.index(global_espaco)
-    selected_room = st.selectbox(
-        "Espaço",
-        room_opts,
-        index=idx,
-        key="v2_profile_c_room",
-    )
+    selected_room = st.selectbox("Espaço", room_opts, index=idx, key="v2_profile_c_room")
 
     if selected_room == "— Selecione um espaço —":
         st.info("Escolha um espaço para visualizar os detalhes.")
@@ -290,12 +297,11 @@ def render_profile_c_spaces(filters: dict):
         return
 
     total_hours = int(df["Duracao_Minutos"].sum() / 60)
-    avg_class_size = round(df["Numero_Presencas"].mean(), 1) if not df.empty else 0
-    ghost_count = int((df["Numero_Presencas"] == 0).sum()) if not df.empty else 0
+    avg_class_size = round(df["Numero_Presencas"].mean(), 1)
+    ghost_count = int((df["Numero_Presencas"] == 0).sum())
     unique_days = df["DataCompleta"].nunique()
-    total_available_min = unique_days * 480
     used_min = df["Duracao_Minutos"].sum()
-    util_rate = min(round(used_min / max(total_available_min, 1) * 100, 1), 100)
+    util_rate = min(round(used_min / max(unique_days * 480, 1) * 100, 1), 100)
 
     k1, k2, k3, k4 = st.columns(4)
     with k1: _render_kpi("Horas Agendadas", f"{total_hours:,}h", "⏱️")
@@ -317,21 +323,17 @@ def render_profile_c_spaces(filters: dict):
             cal_year = st.selectbox("Ano", available_years, key="v2_cal_year")
         with cal_col2:
             cal_month = st.selectbox("Mês", range(1, 13),
-                                     format_func=lambda m: ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun",
-                                                            "Jul", "Ago", "Set", "Out", "Nov", "Dez"][m-1],
+                                     format_func=lambda m: ["Jan","Fev","Mar","Abr","Mai","Jun",
+                                                            "Jul","Ago","Set","Out","Nov","Dez"][m-1],
                                      index=0, key="v2_cal_month")
         fig_cal = chart_monthly_calendar(df, int(cal_year), int(cal_month))
         st.plotly_chart(fig_cal, use_container_width=True, key="chart_month_cal")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Calendário de Horários ────────────────────────────────────────────
-    st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Calendário de Horários</h4>", unsafe_allow_html=True)
-    
     filtered_df = render_timetable_calendar(df)
 
-    # ── Horário Analítico ─────────────────────────────────────────────────
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Horário Analítico</h4>", unsafe_allow_html=True)
 
@@ -348,17 +350,11 @@ def render_profile_c_spaces(filters: dict):
         "Designacao_UC", "Nome_Curso", "Designacao_Atividade",
         "Docente_Responsavel", "Presenças", "Estado",
     ]].rename(columns={
-        "DiaSemana": "Dia",
-        "Designacao_UC": "UC",
-        "Nome_Curso": "Curso",
-        "Designacao_Atividade": "Atividade",
-        "Docente_Responsavel": "Docente",
+        "DiaSemana": "Dia", "Designacao_UC": "UC", "Nome_Curso": "Curso",
+        "Designacao_Atividade": "Atividade", "Docente_Responsavel": "Docente",
     })
 
-    st.dataframe(
-        display,
-        use_container_width=True,
-        hide_index=True,
+    st.dataframe(display, use_container_width=True, hide_index=True,
         column_config={
             "Data": st.column_config.TextColumn("Data", width="small"),
             "Dia": st.column_config.TextColumn("Dia", width="small"),
@@ -445,25 +441,17 @@ def render_profile_d_quality(filters: dict):
             return " | ".join(flags) if flags else "—"
 
         display["Anomalias"] = display.apply(_combine_flags, axis=1)
-
         audit_cols = ["Data", "DiaSemana", "Início", "Fim", "Edificio", "Nome_Espaco",
                       "Designacao_UC", "Nome_Curso", "Docente_Responsavel",
                       "Duracao_Minutos", "Numero_Presencas", "Anomalias"]
         audit_cols = [c for c in audit_cols if c in display.columns]
-
         st.dataframe(
             display[audit_cols].rename(columns={
-                "DiaSemana": "Dia",
-                "Nome_Espaco": "Espaço",
-                "Designacao_UC": "UC",
-                "Nome_Curso": "Curso",
-                "Docente_Responsavel": "Docente",
-                "Duracao_Minutos": "Dur. (min)",
-                "Numero_Presencas": "Presenças",
+                "DiaSemana": "Dia", "Nome_Espaco": "Espaço", "Designacao_UC": "UC",
+                "Nome_Curso": "Curso", "Docente_Responsavel": "Docente",
+                "Duracao_Minutos": "Dur. (min)", "Numero_Presencas": "Presenças",
             }),
-            use_container_width=True,
-            hide_index=True,
-            height=400,
+            use_container_width=True, hide_index=True, height=400,
         )
     else:
         st.success("Nenhuma anomalia encontrada nos registos atuais.")
@@ -482,7 +470,6 @@ def render_profile_e_alerts(filters: dict):
                 "Os thresholds aplicam-se à percentagem de salas ocupadas por slot (Dia da Semana × Hora).</p>",
                 unsafe_allow_html=True)
 
-    # ── Sliders ─────────────────────────────────────────────────────
     col_s1, col_s2 = st.columns(2)
     with col_s1:
         low_threshold = st.slider("Limite Baixo-Médio (%)", 10, 50, 30, key="v4_alert_low")
@@ -493,28 +480,25 @@ def render_profile_e_alerts(filters: dict):
         st.error("O limite baixo-médio deve ser inferior ao limite médio-alto.")
         st.stop()
 
-    # ── Fetch data ──────────────────────────────────────────────────
     df = get_filtered_data(**filters)
-    
-    # ATUALIZAÇÃO: Total de salas calculado dinamicamente com base nos filtros da barra lateral
+
     total_rooms = get_filtered_rooms_count(
-        departamento=filters.get("departamento"),
+        escola=filters.get("escola"),
         edificio=filters.get("edificio"),
-        categoria_espaco=filters.get("categoria_espaco")
+        categoria_espaco=filters.get("categoria_espaco"),
     )
 
     if df.empty:
         st.info("Sem dados para os filtros selecionados.")
         return
 
-    # ── KPIs ────────────────────────────────────────────────────────
     kpi_e = _compute_general_kpis(df)
     espacos_livres = max(total_rooms - kpi_e["espacos_ocupados"], 0)
 
     df_slots = get_occupancy_by_slot(
         ano_letivo=filters.get("ano_letivo"),
         semestre=filters.get("semestre"),
-        departamento=filters.get("departamento"),
+        escola=filters.get("escola"),
         edificio=filters.get("edificio"),
         categoria_espaco=filters.get("categoria_espaco"),
     )
@@ -535,14 +519,12 @@ def render_profile_e_alerts(filters: dict):
 
     st.markdown("<div style='height:1.2rem'></div>", unsafe_allow_html=True)
 
-    # ── Critical Heatmap ────────────────────────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Mapa de Ocupação Crítica</h4>", unsafe_allow_html=True)
     fig_crit = chart_critical_heatmap(df_slots, total_rooms, low_threshold, high_threshold)
     st.plotly_chart(fig_crit, use_container_width=True, key="chart_critical_heat")
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Critical Slots Table ───────────────────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Slots Críticos</h4>", unsafe_allow_html=True)
     if not df_slots.empty:
         df_slots["ratio"] = df_slots["Salas_Ocupadas"] / total_rooms * 100
@@ -552,16 +534,10 @@ def render_profile_e_alerts(filters: dict):
             else "🟢 Baixa"
         )
         df_slots["% Ocupação"] = df_slots["ratio"].round(1).astype(str) + "%"
-
         display = df_slots.sort_values("ratio", ascending=False)[
             ["DiaSemana", "Hora_Inicio", "Salas_Ocupadas", "% Ocupação", "Nível"]
-        ].rename(columns={
-            "DiaSemana": "Dia",
-            "Hora_Inicio": "Hora",
-            "Salas_Ocupadas": "Salas Ocupadas",
-        })
+        ].rename(columns={"DiaSemana": "Dia", "Hora_Inicio": "Hora", "Salas_Ocupadas": "Salas Ocupadas"})
         display["Hora"] = display["Hora"].astype(int).astype(str) + "h"
-
         st.dataframe(display, use_container_width=True, hide_index=True, height=400)
     else:
         st.info("Sem dados de ocupação por slot.")
@@ -576,24 +552,19 @@ def render_profile_f_comparison(filters: dict):
                 "Selecione várias salas para comparar as suas métricas de ocupação.</p>",
                 unsafe_allow_html=True)
 
-    # ── Room multi-select ───────────────────────────────────────────
     all_rooms = get_espacos(
         edificio=filters.get("edificio"),
         categoria=filters.get("categoria_espaco"),
     )
     selected_rooms = st.multiselect(
-        "Salas para comparar",
-        options=all_rooms,
-        default=[],
-        key="v4_compare_rooms",
-        max_selections=10,
+        "Salas para comparar", options=all_rooms, default=[],
+        key="v4_compare_rooms", max_selections=10,
     )
 
     if not selected_rooms:
         st.info("Selecione pelo menos uma sala para começar a comparação.")
         return
 
-    # ── Fetch data per room ─────────────────────────────────────────
     rooms_data = {}
     with st.spinner("A carregar dados das salas..."):
         for room in selected_rooms:
@@ -609,7 +580,6 @@ def render_profile_f_comparison(filters: dict):
         st.warning("Nenhum dado encontrado para as salas selecionadas.")
         return
 
-    # ── Comparative KPIs Table ─────────────────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Tabela Comparativa</h4>", unsafe_allow_html=True)
     rows = []
     for room_name, rd in rooms_data.items():
@@ -626,7 +596,6 @@ def render_profile_f_comparison(filters: dict):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Side-by-side Bar Chart ──────────────────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Sessões por Sala</h4>", unsafe_allow_html=True)
     fig_bar = chart_top_espacos(
         pd.concat([rd.assign(Nome_Espaco=name) for name, rd in rooms_data.items()], ignore_index=True),
@@ -636,7 +605,6 @@ def render_profile_f_comparison(filters: dict):
 
     st.markdown("<div style='height:1rem'></div>", unsafe_allow_html=True)
 
-    # ── Overlaid Occupancy Trend ────────────────────────────────────
     st.markdown("<h4 style='color:#1B2139;font-weight:700;'>Tendência Diária Comparativa</h4>", unsafe_allow_html=True)
     fig_trend = chart_comparison_trend(rooms_data)
     st.plotly_chart(fig_trend, use_container_width=True, key="chart_compare_trend")
@@ -652,33 +620,26 @@ def render_profile_g_empty_rooms(filters: dict):
                 "apenas as salas que se encontram totalmente disponíveis durante todo o bloco selecionado.</p>",
                 unsafe_allow_html=True)
 
-    # ── Seleção dos Filtros Temporais ──────────────────────────────────
     col_date, col_h_ini, col_h_fim = st.columns([2, 1, 1])
     with col_date:
         search_date = st.date_input(
-            "Data de Pesquisa", 
-            value=pd.to_datetime("2025-10-16").date(), 
+            "Data de Pesquisa",
+            value=datetime.now().date(),
             format="DD/MM/YYYY",
-            key="free_search_date"
+            key="free_search_date",
         )
     with col_h_ini:
         search_hour_ini = st.selectbox(
-            "Hora de Início", 
-            options=range(8, 23), 
-            format_func=lambda h: f"{h:02d}:00 h",
-            index=1,
-            key="free_search_hour_ini"
+            "Hora de Início", options=range(8, 23),
+            format_func=lambda h: f"{h:02d}:00 h", index=1, key="free_search_hour_ini",
         )
     with col_h_fim:
         search_hour_fim = st.selectbox(
-            "Hora de Fim", 
-            options=range(search_hour_ini + 1, 24), 
-            format_func=lambda h: f"{h:02d}:00 h",
-            index=1,
-            key="free_search_hour_fim"
+            "Hora de Fim", options=range(search_hour_ini + 1, 24),
+            format_func=lambda h: f"{h:02d}:00 h", index=1, key="free_search_hour_fim",
         )
 
-    # ── Obtenção dos Dados Filtrados do Data Warehouse ────────────────
+    esc = filters.get("escola")
     dep = filters.get("departamento")
     edi = filters.get("edificio")
     cat = filters.get("categoria_espaco")
@@ -687,19 +648,18 @@ def render_profile_g_empty_rooms(filters: dict):
         data_pesquisa=str(search_date),
         hora_inicio=search_hour_ini,
         hora_fim=search_hour_fim,
+        escola=esc,
         departamento=dep,
         edificio=edi,
-        categoria_espaco=cat
+        categoria_espaco=cat,
     )
 
-    # Total de salas calculado dinamicamente com base no filtro ativo da sidebar
-    total_rooms = get_filtered_rooms_count(departamento=dep, edificio=edi, categoria_espaco=cat)
-    
+    total_rooms = get_filtered_rooms_count(escola=esc, edificio=edi, categoria_espaco=cat, departamento=dep)
+
     vazias_count = len(df_free)
     ocupadas_count = max(total_rooms - vazias_count, 0)
     tx_disponibilidade = round((vazias_count / max(total_rooms, 1)) * 100, 1)
 
-    # ── Grid de KPIs Visualmente Alinhada ──────────────────────────────
     k1, k2, k3, k4 = st.columns(4)
     with k1: _render_kpi("Salas Vazias", f"{vazias_count:,}", "🟢")
     with k2: _render_kpi("Salas Ocupadas", f"{ocupadas_count:,}", "🏢")
@@ -708,7 +668,6 @@ def render_profile_g_empty_rooms(filters: dict):
 
     st.markdown("<div style='height:1.5rem'></div>", unsafe_allow_html=True)
 
-    # ── Output dos Resultados ─────────────────────────────────────────
     data_formatada_pt = search_date.strftime('%d/%m/%Y')
     st.markdown(f"<h4 style='color:#1B2139;font-weight:700;'>Salas livres para {data_formatada_pt} entre as {search_hour_ini:02d}:00 e as {search_hour_fim:02d}:00</h4>", unsafe_allow_html=True)
 
@@ -721,9 +680,9 @@ def render_profile_g_empty_rooms(filters: dict):
                 "Edificio": st.column_config.TextColumn("Edifício", width="medium"),
                 "Sala": st.column_config.TextColumn("Sala / Espaço", width="medium"),
                 "Categoria": st.column_config.TextColumn("Tipologia", width="medium"),
-                "Departamento": st.column_config.TextColumn("Escola / Departamento", width="large"),
-            }
+                "Escola": st.column_config.TextColumn("Escola", width="medium"),
+            },
         )
-        st.caption(f"💡 Foram encontradas {vazias_count} salas completamente disponíveis de um universo de {total_rooms} espaços visíveis.")
+        st.caption(f"💡 Foram encontradas {vazias_count} salas disponíveis de um universo de {total_rooms} espaços visíveis.")
     else:
-        st.warning("⚠️ Não existem salas totalmente livres que cubram todo este intervalo de tempo com os filtros atuais.")
+        st.warning("⚠️ Não existem salas livres que cubram todo este intervalo de tempo com os filtros atuais.")

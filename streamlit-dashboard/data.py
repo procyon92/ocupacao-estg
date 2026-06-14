@@ -16,7 +16,7 @@ def _get_connection():
 _FILTER_COLUMNS = {
     "ano_letivo":      ("d", "Ano_Escolar",       "Dim_Data",        "d",  "f.SK_Data = d.SK_Data"),
     "semestre":        ("d", "Semestre",           "Dim_Data",        "d",  "f.SK_Data = d.SK_Data"),
-    "departamento":    ("e", "Escola_Responsavel", "Dim_Espaco",      "e",  "f.SK_Espaco = e.SK_Espaco"),
+    "escola":          ("e", "Escola_Responsavel", "Dim_Espaco",      "e",  "f.SK_Espaco = e.SK_Espaco"),
     "edificio":        ("e", "Edificio",           "Dim_Espaco",      "e",  "f.SK_Espaco = e.SK_Espaco"),
     "categoria_espaco":("e", "Categoria_Espaco",   "Dim_Espaco",      "e",  "f.SK_Espaco = e.SK_Espaco"),
     "espaco":          ("e", "Nome_Espaco",        "Dim_Espaco",      "e",  "f.SK_Espaco = e.SK_Espaco"),
@@ -30,7 +30,7 @@ _FILTER_COLUMNS = {
 def get_cascade_options(target_column: str, parent_filters: dict = None, only_labs: bool = False) -> list:
     """
     Return distinct values for `target_column` after applying parent filters.
-    parent_filters = {"departamento": "DEI", "edificio": "Edificio A", ...}
+    parent_filters = {"escola": "ESTG", "edificio": "Edificio A", ...}
     """
     col_info = _FILTER_COLUMNS.get(target_column)
     if not col_info:
@@ -87,7 +87,8 @@ def get_semestres() -> list:
 
 
 @st.cache_data(ttl=300)
-def get_departamentos() -> list:
+def get_escolas() -> list:
+    """Retorna as escolas distintas (Escola_Responsavel) da Dim_Espaco."""
     conn = _get_connection()
     try:
         query = "SELECT DISTINCT e.Escola_Responsavel AS val FROM Dim_Espaco e WHERE e.Escola_Responsavel NOT IN ('N/D','Indefinido/N.D.') ORDER BY val"
@@ -98,10 +99,32 @@ def get_departamentos() -> list:
 
 
 @st.cache_data(ttl=300)
-def get_edificios(departamento: str = None, only_labs: bool = False) -> list:
+def get_departamentos() -> dict:
+    """Retorna {label_curto: valor_completo_no_dw}"""
+    conn = _get_connection()
+    try:
+        query = """
+            SELECT DISTINCT TRIM(Departamento) AS val
+            FROM Dim_Espaco
+            WHERE Departamento IS NOT NULL
+              AND TRIM(Departamento) != ''
+              AND TRIM(Departamento) NOT IN ('N/D', 'Indefinido/N.D.')
+            ORDER BY val
+        """
+        df = pd.read_sql(query, conn)
+        result = {}
+        for v in df["val"].tolist():
+            label = v.replace("Departamento de ", "").replace("Departamento do ", "").strip()
+            result[label] = v
+        return result
+    finally:
+        conn.close()
+
+@st.cache_data(ttl=300)
+def get_edificios(escola: str = None, only_labs: bool = False) -> list:
     pf = {}
-    if departamento:
-        pf["departamento"] = departamento
+    if escola:
+        pf["escola"] = escola
     return get_cascade_options("edificio", parent_filters=pf, only_labs=only_labs)
 
 
@@ -160,7 +183,8 @@ def get_total_rooms_count() -> int:
     """Total number of unique physical rooms in Dim_Espaco (excluding N/D)."""
     conn = _get_connection()
     try:
-        query = "SELECT COUNT(DISTINCT Nome_Espaco) FROM Dim_Espaco WHERE Nome_Espaco != 'N/D'"
+        # par composto por causa de salas em edificios diferentes com o mesmo nome
+        query = "SELECT COUNT(DISTINCT Edificio, Nome_Espaco) FROM Dim_Espaco WHERE Nome_Espaco != 'N/D'"
         df = pd.read_sql(query, conn)
         return int(df.iloc[0, 0])
     finally:
@@ -201,7 +225,7 @@ def get_semanas(ano_letivo: str = None, semestre: int = None) -> list:
 def get_occupancy_by_slot(
     ano_letivo: str = None,
     semestre: int = None,
-    departamento: str = None,
+    escola: str = None,
     edificio: str = None,
     categoria_espaco: str = None,
 ) -> pd.DataFrame:
@@ -224,8 +248,8 @@ def get_occupancy_by_slot(
             where_clauses.append("d.Ano_Escolar = %s"); params.append(ano_letivo)
         if semestre is not None:
             where_clauses.append("d.Semestre = %s"); params.append(semestre)
-        if departamento:
-            where_clauses.append("e.Escola_Responsavel = %s"); params.append(departamento)
+        if escola:
+            where_clauses.append("e.Escola_Responsavel = %s"); params.append(escola)
         if edificio:
             where_clauses.append("e.Edificio = %s"); params.append(edificio)
         if categoria_espaco:
@@ -253,6 +277,7 @@ def get_occupancy_by_slot(
 def get_filtered_data(
     ano_letivo: str = None,
     semestre: int = None,
+    escola: str = None,
     departamento: str = None,
     edificio: str = None,
     categoria_espaco: str = None,
@@ -325,8 +350,10 @@ def get_filtered_data(
             query += " AND d.Ano_Escolar = %s"; params.append(ano_letivo)
         if semestre is not None:
             query += " AND d.Semestre = %s"; params.append(semestre)
+        if escola:
+            query += " AND e.Escola_Responsavel = %s"; params.append(escola)
         if departamento:
-            query += " AND e.Escola_Responsavel = %s"; params.append(departamento)
+            query += " AND e.Departamento = %s"; params.append(departamento)
         if edificio:
             query += " AND e.Edificio = %s"; params.append(edificio)
         if categoria_espaco:
@@ -586,39 +613,42 @@ def get_raw_anomalies(limit: int = 100) -> pd.DataFrame:
         return df
     finally:
         conn.close()
-        
+
+
 @st.cache_data(ttl=60)
 def get_free_rooms_by_interval(
-    data_pesquisa: str,       # Formato 'YYYY-MM-DD'
-    hora_inicio: int,         # Ex: 14
-    hora_fim: int,            # Ex: 17
+    data_pesquisa: str,
+    hora_inicio: int,
+    hora_fim: int,
     departamento: str = None,
+    escola: str = None,
     edificio: str = None,
-    categoria_espaco: str = None
+    categoria_espaco: str = None,
 ) -> pd.DataFrame:
     """
-    Retorna todas as salas que NÃO têm qualquer agendamento 
+    Retorna todas as salas que NÃO têm qualquer agendamento
     que se sobreponha ao intervalo entre hora_inicio e hora_fim.
     """
     conn = _get_connection()
     try:
-        # 1. Parâmetros da subquery (as condições temporais)
         subquery_where = [
             "d.DataCompleta = %s",
-            "h1.Hora < %s",  # Hora_Inicio do evento < Hora_Fim da pesquisa
-            "h2.Hora > %s"   # Hora_Fim do evento > Hora_Inicio da pesquisa
+            "h1.Hora < %s",
+            "h2.Hora > %s",
         ]
         params = [data_pesquisa, hora_fim, hora_inicio]
 
-        # 2. Parâmetros da query principal (filtros geográficos/tipologia)
         main_where = [
             "ocupadas.SK_Espaco IS NULL",
             "e_total.Nome_Espaco != 'N/D'",
-            "e_total.is_online != 1"
+            "e_total.is_online != 1",
         ]
 
-        if departamento:
+        if escola:
             main_where.append("e_total.Escola_Responsavel = %s")
+            params.append(escola)
+        if departamento:                                          
+            main_where.append("e_total.Departamento = %s")
             params.append(departamento)
         if edificio:
             main_where.append("e_total.Edificio = %s")
@@ -627,13 +657,12 @@ def get_free_rooms_by_interval(
             main_where.append("e_total.Categoria_Espaco = %s")
             params.append(categoria_espaco)
 
-        # Montagem da Query corrigida
         query = f"""
-            SELECT 
+            SELECT
                 e_total.Edificio,
                 e_total.Nome_Espaco AS Sala,
                 e_total.Categoria_Espaco AS Categoria,
-                e_total.Escola_Responsavel AS Departamento
+                e_total.Escola_Responsavel AS Escola
             FROM Dim_Espaco e_total
             LEFT JOIN (
                 SELECT DISTINCT f.SK_Espaco
@@ -646,26 +675,31 @@ def get_free_rooms_by_interval(
             WHERE {' AND '.join(main_where)}
             ORDER BY e_total.Edificio, e_total.Nome_Espaco
         """
-        
+
         df = pd.read_sql(query, conn, params=params)
         return df
     finally:
         conn.close()
-        
+
+
 @st.cache_data(ttl=300)
 def get_filtered_rooms_count(
-    departamento: str = None,
+    escola: str = None,
     edificio: str = None,
-    categoria_espaco: str = None
+    departamento: str = None,
+    categoria_espaco: str = None,
 ) -> int:
     """Retorna o número total de espaços físicos que cumprem os filtros selecionados."""
     conn = _get_connection()
     try:
         where_clauses = ["Nome_Espaco != 'N/D'", "is_online != 1"]
         params = []
-        
-        if departamento:
+
+        if escola:
             where_clauses.append("Escola_Responsavel = %s")
+            params.append(escola)
+        if departamento:                              
+            where_clauses.append("Departamento = %s")
             params.append(departamento)
         if edificio:
             where_clauses.append("Edificio = %s")
@@ -673,9 +707,29 @@ def get_filtered_rooms_count(
         if categoria_espaco:
             where_clauses.append("Categoria_Espaco = %s")
             params.append(categoria_espaco)
-            
-        query = f"SELECT COUNT(DISTINCT Nome_Espaco) FROM Dim_Espaco WHERE {' AND '.join(where_clauses)}"
+
+        query = f"SELECT COUNT(DISTINCT Edificio,Nome_Espaco) FROM Dim_Espaco WHERE {' AND '.join(where_clauses)}"
         df = pd.read_sql(query, conn, params=params)
         return int(df.iloc[0, 0])
+    finally:
+        conn.close()
+        
+@st.cache_data(ttl=300)
+def get_espacos(edificio: str = None, categoria: str = None, departamento: str = None, only_labs: bool = False) -> list:
+    conn = _get_connection()
+    try:
+        where = ["Nome_Espaco != 'N/D'", "is_online != 1"]
+        params = []
+        if edificio:
+            where.append("Edificio = %s"); params.append(edificio)
+        if categoria:
+            where.append("Categoria_Espaco = %s"); params.append(categoria)
+        if departamento:
+            where.append("Departamento = %s"); params.append(departamento)
+        if only_labs:
+            where.append("Categoria_Espaco = 'Laboratório'")
+        query = f"SELECT DISTINCT Nome_Espaco AS val FROM Dim_Espaco WHERE {' AND '.join(where)} ORDER BY val"
+        df = pd.read_sql(query, conn, params=params)
+        return df["val"].tolist()
     finally:
         conn.close()

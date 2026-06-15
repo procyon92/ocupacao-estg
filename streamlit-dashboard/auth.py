@@ -2,6 +2,8 @@
 auth.py — Módulo de autenticação simples para o Dashboard.
 Implementa login com session_state do Streamlit.
 """
+import os
+import base64
 import streamlit as st
 from config import AUTH_USERS
 
@@ -9,6 +11,12 @@ from config import AUTH_USERS
 def check_auth() -> bool:
     """Verifica se o utilizador está autenticado."""
     return st.session_state.get("authenticated", False)
+
+
+def _img_to_b64(path: str) -> str:
+    """Converte uma imagem para base64 para embedding inline em HTML."""
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
 
 
 def login_page():
@@ -22,12 +30,11 @@ def login_page():
         }
         .stApp > header { display: none; }
 
-        /* Hide the intrusive "Press Enter to apply" instruction */
         [data-testid="InputInstructions"] {
             display: none !important;
         }
 
-        /* Style the middle column as the login card */
+        /* Card central */
         [data-testid="column"]:nth-of-type(2) {
             max-width: 420px !important;
             margin: 10vh auto !important;
@@ -37,31 +44,22 @@ def login_page():
             box-shadow: 0 25px 50px rgba(0,0,0,0.25) !important;
         }
 
-        /* Logo text */
-        .login-logo {
-            text-align: center;
-            font-size: 2.4rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #3B63FB, #22D3EE);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.2rem;
-        }
         .login-subtitle {
             text-align: center;
             color: #7B8AA6;
             font-size: 0.95rem;
+            margin-top: 0.4rem;
             margin-bottom: 1.5rem;
         }
 
-        /* Labels inside the form */
+        /* Labels do form */
         [data-testid="stForm"] label p {
             color: #1B2139 !important;
             font-weight: 600 !important;
             font-size: 0.85rem !important;
         }
 
-        /* Text inputs inside the card column */
+        /* Inputs */
         [data-testid="column"]:nth-of-type(2) input {
             color: #1B2139 !important;
             background: #F8FAFC !important;
@@ -77,13 +75,11 @@ def login_page():
         [data-testid="column"]:nth-of-type(2) input::placeholder {
             color: #94A3B8 !important;
         }
-
-        /* Password input — room for the eye icon */
         [data-testid="column"]:nth-of-type(2) input[type="password"] {
             padding-right: 3rem !important;
         }
 
-        /* Submit button */
+        /* Botão */
         [data-testid="column"]:nth-of-type(2) .stButton button {
             background: linear-gradient(135deg, #3B63FB, #2246D4) !important;
             color: white !important;
@@ -99,7 +95,7 @@ def login_page():
             box-shadow: 0 4px 12px rgba(59,99,251,0.3);
         }
 
-        /* Error messages */
+        /* Erros */
         [data-testid="column"]:nth-of-type(2) .stAlert {
             background: #FEF2F2 !important;
             border: 1px solid #FECACA !important;
@@ -110,10 +106,31 @@ def login_page():
     </style>
     """, unsafe_allow_html=True)
 
+    # Carregar logo como base64 para embedding inline
+    logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+    try:
+        logo_b64 = _img_to_b64(logo_path)
+        logo_html = (
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'style="height:72px;width:auto;object-fit:contain;display:block;margin:0 auto 0.5rem;"/>'
+        )
+    except FileNotFoundError:
+        # Fallback se o logo não existir
+        logo_html = (
+            '<div style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:64px;height:64px;border-radius:16px;margin:0 auto 0.5rem;'
+            'background:linear-gradient(135deg,#3B63FB,#22D3EE);">'
+            '<span style="color:white;font-size:1.8rem;font-weight:800;">E</span></div>'
+        )
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown('<div class="login-logo">📊 ESTG</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subtitle">Gestão de Ocupação de Espaços</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="text-align:center;margin-bottom:1.2rem;">
+            {logo_html}
+            <div class="login-subtitle">Gestão de Ocupação de Espaços</div>
+        </div>
+        """, unsafe_allow_html=True)
 
         with st.form("login_form"):
             username = st.text_input("Utilizador", placeholder="admin")

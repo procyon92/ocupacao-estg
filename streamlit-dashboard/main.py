@@ -25,13 +25,13 @@ from queries import (
     get_categorias, get_espacos, get_ciclos_estudo, get_cursos, get_ucs,
     get_epocas, get_dias_semana, get_semanas,
 )
-from profiles.general    import GeneralProfile
-from profiles.labs       import LabsProfile
-from profiles.space_detail import SpaceDetailProfile
-from profiles.quality    import QualityProfile
-from profiles.alerts     import AlertsProfile
-from profiles.comparison import ComparisonProfile
-from profiles.empty_rooms import EmptyRoomsProfile
+from profiles.general_view    import GeneralProfile
+from profiles.labs_view      import LabsProfile
+from profiles.space_detail_view import SpaceDetailProfile
+from profiles.quality_view    import QualityProfile
+from profiles.alerts_view     import AlertsProfile
+from profiles.comparison_view import ComparisonProfile
+from profiles.empty_rooms_view import EmptyRoomsProfile
 
 # ── Page config ───────────────────────────────────────────────────────
 st.set_page_config(

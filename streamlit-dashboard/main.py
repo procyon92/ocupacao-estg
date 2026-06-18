@@ -1,497 +1,357 @@
 """
-main.py — V4 entry point.
-Top horizontal navigation + sidebar grouped contextual filters + profile routing.
+main.py — Entry point.
+
+What changed vs the original:
+  - _locals is NO LONGER a module-level mutable dict mutated by a function.
+    _render_filters() now returns a dict. Clean, refactor-safe.
+  - All session_state keys use SessionKeys constants (no scattered string literals).
+  - _reset_filters iterates SessionKeys.RESETTABLE — complete by construction.
+  - Profile routing uses a dispatch dict instead of an if/elif chain.
+  - CSS is loaded from assets/style.css (zero logic in this file).
+  - Filters TypedDict provides a formal contract between main and profiles.
 """
+from __future__ import annotations
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-import streamlit as st
 from datetime import datetime
-from config import APP_TITLE, PAGE_TITLE, FAVICON
+import streamlit as st
+
+from config import APP_TITLE, PAGE_TITLE, FAVICON, LAB_CATEGORY, Sentinel, CACHE_TTL_COLD
 from auth import check_auth, login_page, logout
-from data import (
-    get_anos_letivos, get_departamentos, get_edificios,
+from models import Filters, SessionKeys
+from queries import (
+    get_anos_letivos, get_escolas, get_departamentos, get_edificios,
     get_categorias, get_espacos, get_ciclos_estudo, get_cursos, get_ucs,
     get_epocas, get_dias_semana, get_semanas,
 )
-from pages import (
-    render_profile_a_general, render_profile_b_labs,
-    render_profile_c_spaces, render_profile_d_quality,
-    render_profile_e_alerts, render_profile_f_comparison,
-    render_profile_g_empty_rooms,
-)
+from profiles.general_view    import GeneralProfile
+from profiles.labs_view      import LabsProfile
+from profiles.space_detail_view import SpaceDetailProfile
+from profiles.quality_view    import QualityProfile
+from profiles.alerts_view     import AlertsProfile
+from profiles.comparison_view import ComparisonProfile
+from profiles.empty_rooms_view import EmptyRoomsProfile
 
+# ── Page config ───────────────────────────────────────────────────────
 st.set_page_config(
     page_title=PAGE_TITLE,
     page_icon=FAVICON,
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="expanded",
 )
 
-st.markdown("""
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
+# ── CSS ───────────────────────────────────────────────────────────────
+_CSS_PATH = os.path.join(os.path.dirname(__file__), "assets", "style.css")
+with open(_CSS_PATH) as _f:
+    st.markdown(f"<style>{_f.read()}</style>", unsafe_allow_html=True)
 
-    html, body, [data-testid="stApp"] {
-        font-family: 'Inter', sans-serif !important;
-    }
-
-    .main .block-container {
-        padding-top: 1rem;
-        padding-bottom: 2rem;
-        max-width: 1400px;
-    }
-
-    /* ───────────────── Sidebar fixa ───────────────── */
-    [data-testid="stSidebar"] {
-        background: linear-gradient(180deg, #1B2139 0%, #141929 100%) !important;
-        min-width: 230px !important;
-        max-width: 230px !important;
-        width: 230px !important;
-        flex: 0 0 230px !important;
-        display: flex;
-        flex-direction: column;
-        height: 100vh;
-    }
-
-    [data-testid="stSidebar"] > div:first-child {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        overflow-y: auto;
-        min-height: 0;
-    }
-
-    /* Remove TODOS os botões de collapse da sidebar */
-    button[kind="header"],
-    [data-testid="collapsedControl"],
-    [data-testid="stSidebarCollapseButton"],
-    [data-testid="stSidebarCollapsedControl"] {
-        display: none !important;
-        visibility: hidden !important;
-    }
-    
-    /* Remove header/topbar vazio do Streamlit */
-    header[data-testid="stHeader"] {
-        display: none !important;
-    }
-
-    /* Remove espaço superior que o header deixava */
-    .block-container {
-        padding-top: 5rem !important;
-    }
-
-    [data-testid="stSidebar"] * {
-        color: white !important;
-    }
-
-    [data-testid="stSidebar"] label,
-    [data-testid="stSidebar"] .stSelectbox label,
-    [data-testid="stSidebar"] .stCheckbox label {
-        color: rgba(255,255,255,0.85) !important;
-        font-size: 0.82rem !important;
-        font-weight: 500 !important;
-    }
-
-    #MainMenu {
-        visibility: hidden;
-    }
-
-    footer {
-        visibility: hidden;
-    }
-
-    [data-testid="stMetric"] {
-        background: #F6F8FC;
-        border-radius: 14px;
-        padding: 1.2rem 1.5rem;
-        border: 1px solid #E8EDF5;
-    }
-
-    .stButton > button {
-        border-radius: 10px !important;
-        font-weight: 600 !important;
-        font-size: 0.88rem !important;
-        padding: 0.55rem 1.5rem !important;
-        transition: all 0.2s ease !important;
-    }
-
-    .stButton > button:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(59,99,251,0.2);
-    }
-
-    [data-testid="stSidebar"] .stButton button[kind="secondary"] {
-        background: rgba(255,255,255,0.12) !important;
-        color: white !important;
-        border: 1px solid rgba(255,255,255,0.2) !important;
-    }
-
-    [data-testid="stSidebar"] .stButton button[kind="secondary"]:hover {
-        background: rgba(255,255,255,0.2) !important;
-        border-color: rgba(255,255,255,0.35) !important;
-    }
-
-    [data-testid="stSidebar"] .stSelectbox > div > div {
-        border-radius: 8px !important;
-        border-color: rgba(255,255,255,0.15) !important;
-        background: rgba(255,255,255,0.08) !important;
-    }
-
-    [data-testid="stSidebar"] .stCheckbox {
-        margin-top: -0.4rem;
-    }
-
-    .stSelectbox,
-    .stDateInput,
-    .stMultiSelect {
-        font-size: 0.88rem !important;
-    }
-
-    .main .stRadio > div {
-        gap: 0.3rem !important;
-    }
-
-    .main .stRadio label {
-        border: 1px solid #E2E8F0 !important;
-        border-radius: 8px !important;
-        padding: 0.4rem 1rem !important;
-        font-size: 0.82rem !important;
-        font-weight: 500 !important;
-        transition: all 0.2s ease !important;
-    }
-
-    [data-testid="stPlotlyChart"] {
-        background: white;
-        border-radius: 16px;
-        padding: 0.8rem;
-        border: 1px solid #E8EDF5;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-
-    [data-testid="stDataFrame"] {
-        border-radius: 12px;
-        overflow: hidden;
-    }
-
-    .stDownloadButton > button {
-        background: linear-gradient(135deg, #3B63FB, #2246D4) !important;
-        color: white !important;
-        border: none !important;
-        border-radius: 10px !important;
-    }
-
-    .stDownloadButton > button:hover {
-        background: linear-gradient(135deg, #2246D4, #1A37B0) !important;
-        transform: translateY(-1px);
-    }
-
-    .sidebar-title {
-        font-size: 1.1rem;
-        font-weight: 800;
-        color: white;
-        padding: 1rem 0.5rem 0.5rem;
-        line-height: 1.3;
-    }
-
-    .sidebar-divider {
-        border-top: 1px solid rgba(255,255,255,0.1);
-        margin: 0.5rem 0;
-    }
-
-    .dashboard-title {
-        font-size: 1.5rem;
-        font-weight: 800;
-        color: #1B2139;
-    }
-
-    [data-testid="stHorizontalNav"] {
-        margin-bottom: 0.5rem;
-    }
-
-    [data-testid="stHorizontalNav"] button {
-        font-weight: 500 !important;
-    }
-
-    .sidebar-group-header {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: rgba(255,255,255,0.55);
-        text-transform: uppercase;
-        letter-spacing: 0.06em;
-        padding: 0.6rem 0 0.2rem;
-        margin-top: 0.1rem;
-    }
-
-    .sidebar-group-divider {
-        border-top: 1px solid rgba(255,255,255,0.06);
-        margin: 0.4rem 0;
-    }
-
-    .active-filters {
-        background: rgba(255,255,255,0.06);
-        border-radius: 8px;
-        padding: 0.5rem 0.6rem;
-        font-size: 0.72rem;
-        color: rgba(255,255,255,0.7);
-        line-height: 1.4;
-        margin: 0.3rem 0;
-    }
-</style>
-""", unsafe_allow_html=True)
-
+# ── Auth ──────────────────────────────────────────────────────────────
 if not check_auth():
     login_page()
     st.stop()
 
-# ─── Top Horizontal Navigation ───────────────────────────────────
+# ── Navigation ────────────────────────────────────────────────────────
+PROFILE_LABELS = [
+    "Visão Geral", "Laboratórios", "Detalhe Sala",
+    "Salas Vazias", "Alertas", "Comparação", "Qualidade",
+]
+
 nav_cols = st.columns([1, 5, 1])
 with nav_cols[0]:
     st.markdown(f"**{APP_TITLE}**")
 with nav_cols[1]:
-    profile_options = ["Visão Geral", "Laboratórios", "Detalhe Sala", "Salas Vazias", "Alertas", "Comparação", "Qualidade"]
     profile = st.segmented_control(
-        "Navegação",
-        options=profile_options,
-        default=profile_options[0],
-        label_visibility="collapsed",
-        key="v4_nav",
-        selection_mode="single",
+        "Navegação", options=PROFILE_LABELS, default=PROFILE_LABELS[0],
+        label_visibility="collapsed", key=SessionKeys.NAV, selection_mode="single",
     )
 with nav_cols[2]:
     st.markdown(f"👤 {st.session_state.get('username', '—')}")
 
 st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
 
-# ─── Smart defaults & shared helpers ─────────────────────────────
+# ── Shared data ───────────────────────────────────────────────────────
 _ANOS = get_anos_letivos()
 _DEFAULT_ANO = _ANOS[0] if _ANOS else None
 _MONTH = datetime.now().month
-_DEFAULT_SEM = 1 if _MONTH in [9,10,11,12,1,2] else 2 if _MONTH in [3,4,5,6,7] else None
+_DEFAULT_SEM = 1 if _MONTH in {9, 10, 11, 12, 1, 2} else 2 if _MONTH in {3, 4, 5, 6, 7} else None
 
-def _ano_index(anos):
-    val = st.session_state.get("v4_filter_ano_letivo", _DEFAULT_ANO)
-    if val in anos:
-        return anos.index(val) + 1
-    return 0
 
-def _sem_index():
-    val = st.session_state.get("v4_filter_semestre", _DEFAULT_SEM)
-    if val in [1, 2]:
-        return [1, 2].index(val) + 1
-    return 0
+def _ano_index(anos: list[str]) -> int:
+    val = st.session_state.get(SessionKeys.ANO_LETIVO, _DEFAULT_ANO)
+    return (anos.index(val) + 1) if val in anos else 0
 
-# ─── Widget manifest ─────────────────────────────────────────────
-_FILTER_MANIFEST = {
-    "ano_letivo":     {"key": "ano_val",     "group": "📅 Calendário",   "default": "Todos"},
-    "semestre":       {"key": "sem_val",     "group": "📅 Calendário",   "default": "Todos"},
-    "semana":         {"key": "semana_val",  "group": "📅 Calendário",   "default": "Todas"},
-    "dias":           {"key": "dias_val",    "group": "📅 Calendário",   "default": []},
-    "escola":         {"key": "dept_val",    "group": "📍 Local",        "default": "Todos"},
-    "edificio":       {"key": "edf_val",     "group": "📍 Local",        "default": "Todos"},
-    "categoria_espaco":{"key": "cat_val",    "group": "📍 Local",        "default": "Todos"},
-    "espaco":         {"key": "esp_val",     "group": "📍 Local",        "default": "Todos"},
-    "ciclo_estudo":   {"key": "ciclo_val",   "group": "🎯 Atividades",   "default": "Todos"},
-    "epoca":          {"key": "epoca_val",   "group": "🎯 Atividades",   "default": "Todos"},
-    "curso":          {"key": "curso_val",   "group": "🎯 Atividades",   "default": "Todos"},
-    "uc":             {"key": "uc_val",      "group": "🎯 Atividades",   "default": "Todos"},
-    "hide_online":    {"key": "hide_online", "group": "toggles",         "default": False},
-    "hide_ghost":     {"key": "hide_ghost",  "group": "toggles",         "default": False},
-    "hide_concurrent":{"key": "hide_concurrent","group": "toggles",      "default": False},
+
+def _sem_index() -> int:
+    val = st.session_state.get(SessionKeys.SEMESTRE, _DEFAULT_SEM)
+    return ([1, 2].index(val) + 1) if val in (1, 2) else 0
+
+
+# ── Widget presence per profile ───────────────────────────────────────
+_PROFILE_WIDGETS: dict[str, list[str]] = {
+    "Visão Geral":    ["ano_letivo", "semestre", "semana", "dias",
+                       "escola", "edificio", "categoria_espaco", "espaco",
+                       "ciclo_estudo", "epoca", "curso", "uc",
+                       "hide_online", "hide_ghost", "hide_concurrent"],
+    "Laboratórios":   ["ano_letivo", "semestre", "semana", "dias",
+                       "escola", "categoria_espaco", "edificio", "espaco",
+                       "ciclo_estudo", "epoca", "curso", "uc",
+                       "hide_online", "hide_ghost", "hide_concurrent"],
+    "Alertas":        ["ano_letivo", "semestre", "semana", "dias",
+                       "escola", "categoria_espaco", "edificio",
+                       "epoca", "hide_online", "hide_ghost", "hide_concurrent"],
+    "Comparação":     ["ano_letivo", "semestre", "semana", "dias",
+                       "escola", "categoria_espaco", "edificio",
+                       "epoca", "hide_online", "hide_ghost", "hide_concurrent"],
+    "Detalhe Sala":   ["ano_letivo", "semestre",
+                       "escola", "edificio", "departamento",
+                       "hide_online", "hide_ghost"],
+    "Qualidade":      ["ano_letivo", "semestre"],
+    "Salas Vazias":   ["ano_letivo", "semestre",
+                       "escola", "departamento", "edificio"],
 }
 
-_toggle_session_keys = ["v4_toggle_online", "v4_toggle_ghost", "v4_toggle_concurrent"]
+# ── Reset callback ────────────────────────────────────────────────────
+def _reset_filters() -> None:
+    """Reset all filter session keys to their defaults.
+    Uses SessionKeys.RESETTABLE so this list is always complete."""
+    anos = get_anos_letivos()
+    month = datetime.now().month
+    defaults = {
+        SessionKeys.ANO_LETIVO:      anos[0] if anos else Sentinel.NO_FILTER,
+        SessionKeys.SEMESTRE:        (1 if month in {9,10,11,12,1,2}
+                                      else 2 if month in {3,4,5,6,7}
+                                      else Sentinel.NO_FILTER),
+        SessionKeys.SEMANA:          Sentinel.NO_FILTER_F,
+        SessionKeys.DIAS:            [],
+        SessionKeys.ESCOLA:          Sentinel.NO_FILTER,
+        SessionKeys.DEPARTAMENTO:    Sentinel.NO_FILTER,
+        SessionKeys.EDIFICIO:        Sentinel.NO_FILTER,
+        SessionKeys.CATEGORIA:       Sentinel.NO_FILTER,
+        SessionKeys.ESPACO:          Sentinel.NO_FILTER,
+        SessionKeys.CICLO:           Sentinel.NO_FILTER,
+        SessionKeys.EPOCA:           Sentinel.NO_FILTER,
+        SessionKeys.CURSO:           Sentinel.NO_FILTER,
+        SessionKeys.UC:              Sentinel.NO_FILTER,
+        SessionKeys.HIDE_ONLINE:     False,
+        SessionKeys.HIDE_GHOST:      False,
+        SessionKeys.HIDE_CONCURRENT: False,
+    }
+    for key in SessionKeys.RESETTABLE:
+        st.session_state[key] = defaults.get(key, Sentinel.NO_FILTER)
 
-# ─── Profile widget presence ─────────────────────────────────────
-_PROFILE_WIDGETS = {
-    "Visão Geral": [
-        "ano_letivo", "semestre", "semana", "dias",
-        "escola", "edificio", "categoria_espaco", "espaco",
-        "ciclo_estudo", "epoca", "curso", "uc",
-        "hide_online", "hide_ghost", "hide_concurrent",
-    ],
-    "Laboratórios": [
-        "ano_letivo", "semestre", "semana", "dias",
-        "escola", "categoria_espaco", "edificio", "espaco",
-        "ciclo_estudo", "epoca", "curso", "uc",
-        "hide_online", "hide_ghost", "hide_concurrent",
-    ],
-    "Alertas": [
-        "ano_letivo", "semestre", "semana", "dias",
-        "escola", "categoria_espaco", "edificio",
-        "epoca",
-        "hide_online", "hide_ghost", "hide_concurrent",
-    ],
-    "Comparação": [
-        "ano_letivo", "semestre", "semana", "dias",
-        "escola", "categoria_espaco", "edificio",
-        "epoca",
-        "hide_online", "hide_ghost", "hide_concurrent",
-    ],
-    "Detalhe Sala": [
-        "ano_letivo", "semestre",
-        "hide_online", "hide_ghost",
-    ],
-    "Qualidade": [
-        "ano_letivo", "semestre",
-    ],
-    "Salas Vazias": [
-        "ano_letivo", "semestre", "edificio", "escola",
-    ],
-}
 
-# ─── Active filters string builder ───────────────────────────────
-def _build_active_string(locals_dict):
+# ── Active filters summary string ─────────────────────────────────────
+def _build_active_string(vals: dict) -> str:
     parts = []
-    d = locals_dict
-    if d.get("ano_val", "Todos") != "Todos": parts.append(f"📅 {d['ano_val']}")
-    if d.get("sem_val", "Todos") != "Todos": parts.append(f"Sem {d['sem_val']}")
-    if d.get("semana_val", "Todas") != "Todas": parts.append(f"S{d['semana_val']}")
-    if d.get("dias_val", []): parts.append(f"Dias: {', '.join(d['dias_val'][:2])}{'…' if len(d['dias_val'])>2 else ''}")
-    if d.get("edf_val", "Todos") != "Todos": parts.append(f"🏗 {d['edf_val']}")
-    if d.get("cat_val", "Todos") != "Todos": parts.append(f"📐 {d['cat_val']}")
-    if d.get("dept_val", "Todos") != "Todos": parts.append(f"🏛 {d['dept_val']}")
-    if d.get("ciclo_val", "Todos") != "Todos": parts.append(f"🎓 {d['ciclo_val']}")
-    if d.get("epoca_val", "Todos") != "Todos": parts.append(f"📆 {d['epoca_val']}")
+    if vals.get("ano_letivo"):         parts.append(f"📅 {vals['ano_letivo']}")
+    if vals.get("semestre"):           parts.append(f"Sem {vals['semestre']}")
+    if vals.get("semana"):             parts.append(f"S{vals['semana']}")
+    if vals.get("dias"):               parts.append(f"Dias: {', '.join(vals['dias'][:2])}{'…' if len(vals['dias'])>2 else ''}")
+    if vals.get("escola"):             parts.append(f"🏛 {vals['escola']}")
+    if vals.get("departamento_label"): parts.append(f"🏢 {vals['departamento_label']}")
+    if vals.get("edificio"):           parts.append(f"🏗 {vals['edificio']}")
+    if vals.get("categoria_espaco"):   parts.append(f"📐 {vals['categoria_espaco']}")
+    if vals.get("ciclo_estudo"):       parts.append(f"🎓 {vals['ciclo_estudo']}")
+    if vals.get("epoca"):              parts.append(f"📆 {vals['epoca']}")
     return " | ".join(parts) if parts else "Sem filtros ativos"
 
-# ─── Reset filters callback ──────────────────────────────────────
-def _reset_filters():
-    anos = get_anos_letivos()
-    st.session_state["v4_filter_ano_letivo"] = anos[0] if anos else "Todos"
-    month = datetime.now().month
-    st.session_state["v4_filter_semestre"] = 1 if month in [9,10,11,12,1,2] else 2 if month in [3,4,5,6,7] else "Todos"
-    for key in list(st.session_state):
-        if key.startswith("v4_filter_") and key not in ("v4_filter_ano_letivo", "v4_filter_semestre"):
-            wname = key.replace("v4_filter_", "")
-            info = _FILTER_MANIFEST.get(wname)
-            if info:
-                st.session_state[key] = info["default"]
-    for key in _toggle_session_keys:
-        st.session_state[key] = False
 
-# ─── Unified filter renderer ─────────────────────────────────────
-def _render_filters(profile):
-    fw = _PROFILE_WIDGETS[profile]
-    is_lab = profile == "Laboratórios"
-    _groups_rendered = set()
+# ── Filter renderer — returns a dict instead of mutating a global ──────
+def _render_filters(profile: str) -> dict:
+    """
+    Render sidebar widgets for the current profile.
+    Returns a plain dict of raw widget values (pre-extraction).
+    No side effects on module-level state.
+    """
+    fw       = _PROFILE_WIDGETS[profile]
+    is_lab   = profile == "Laboratórios"
+    vals: dict = {}
+    groups_seen: set[str] = set()
+
+    _GROUP_LABELS = {
+        "ano_letivo": "📅 Calendário", "semestre": "📅 Calendário",
+        "semana": "📅 Calendário",     "dias": "📅 Calendário",
+        "escola": "📍 Local",          "departamento": "📍 Local",
+        "edificio": "📍 Local",        "categoria_espaco": "📍 Local",
+        "espaco": "📍 Local",
+        "ciclo_estudo": "🎯 Atividades", "epoca": "🎯 Atividades",
+        "curso": "🎯 Atividades",      "uc": "🎯 Atividades",
+    }
 
     for wname in fw:
-        info = _FILTER_MANIFEST[wname]
-        group = info["group"]
-
-        if group != "toggles" and group not in _groups_rendered:
-            _groups_rendered.add(group)
-            st.markdown(f'<div class="sidebar-group-header">{group}</div>', unsafe_allow_html=True)
-
-        sk = f"v4_filter_{wname}"
-        vkey = info["key"]
+        group = _GROUP_LABELS.get(wname)
+        if group and group not in groups_seen:
+            groups_seen.add(group)
+            st.markdown(
+                f'<div class="sidebar-group-header">{group}</div>',
+                unsafe_allow_html=True,
+            )
 
         if wname == "ano_letivo":
-            _locals[vkey] = st.selectbox("Ano Letivo", ["Todos"] + _ANOS, index=_ano_index(_ANOS), key=sk)
+            vals["ano_letivo"] = st.selectbox(
+                "Ano Letivo", [Sentinel.NO_FILTER] + _ANOS,
+                index=_ano_index(_ANOS), key=SessionKeys.ANO_LETIVO,
+            )
         elif wname == "semestre":
-            _locals[vkey] = st.selectbox("Semestre", ["Todos", 1, 2], index=_sem_index(), key=sk)
+            vals["semestre"] = st.selectbox(
+                "Semestre", [Sentinel.NO_FILTER, 1, 2],
+                index=_sem_index(), key=SessionKeys.SEMESTRE,
+            )
         elif wname == "semana":
-            ano = _locals.get("ano_val", "Todos")
-            sem = _locals.get("sem_val", "Todos")
-            opts = ["Todas"] + [str(s) for s in get_semanas(ano_letivo=ano if ano != "Todos" else None, semestre=sem if sem != "Todos" else None)]
-            _locals[vkey] = st.selectbox("Semana", opts, key=sk)
+            ano = vals.get("ano_letivo", Sentinel.NO_FILTER)
+            sem = vals.get("semestre",   Sentinel.NO_FILTER)
+            opts = [Sentinel.NO_FILTER_F] + [
+                str(s) for s in get_semanas(
+                    ano_letivo=ano if ano != Sentinel.NO_FILTER else None,
+                    semestre=sem   if sem != Sentinel.NO_FILTER else None,
+                )
+            ]
+            vals["semana"] = st.selectbox("Semana", opts, key=SessionKeys.SEMANA)
         elif wname == "dias":
-            _locals[vkey] = st.multiselect("Dia da Semana", get_dias_semana(), default=[], key=sk)
+            vals["dias"] = st.multiselect(
+                "Dia da Semana", get_dias_semana(), default=[], key=SessionKeys.DIAS
+            )
         elif wname == "escola":
-            _locals[vkey] = st.selectbox("Escola", ["Todos"] + get_departamentos(), key=sk)
+            vals["escola"] = st.selectbox(
+                "Escola", [Sentinel.NO_FILTER] + get_escolas(), key=SessionKeys.ESCOLA
+            )
+        elif wname == "departamento":
+            dept_map    = get_departamentos()
+            labels      = [Sentinel.NO_FILTER] + list(dept_map.keys())
+            sel_label   = st.selectbox("Departamento", labels, key=SessionKeys.DEPARTAMENTO)
+            vals["departamento_label"] = sel_label if sel_label != Sentinel.NO_FILTER else None
+            vals["departamento"] = (
+                dept_map.get(sel_label) if sel_label != Sentinel.NO_FILTER else None
+            )
         elif wname == "edificio":
-            dept = _locals.get("dept_val", "Todos")
-            dept = dept if dept != "Todos" else None
-            opts = ["Todos"] + get_edificios(departamento=dept, only_labs=is_lab)
-            _locals[vkey] = st.selectbox("Edifício", opts, key=sk)
+            esc  = vals.get("escola")
+            esc  = esc if esc != Sentinel.NO_FILTER else None
+            opts = [Sentinel.NO_FILTER] + get_edificios(escola=esc, only_labs=is_lab)
+            vals["edificio"] = st.selectbox("Edifício", opts, key=SessionKeys.EDIFICIO)
         elif wname == "categoria_espaco":
             if is_lab:
-                _locals[vkey] = st.selectbox("Categoria", ["Laboratório"], disabled=True, key=sk)
+                vals["categoria_espaco"] = st.selectbox(
+                    "Categoria", [LAB_CATEGORY], disabled=True, key=SessionKeys.CATEGORIA
+                )
             else:
-                _locals[vkey] = st.selectbox("Categoria", ["Todos"] + get_categorias(), key=sk)
+                vals["categoria_espaco"] = st.selectbox(
+                    "Categoria", [Sentinel.NO_FILTER] + get_categorias(),
+                    key=SessionKeys.CATEGORIA,
+                )
         elif wname == "espaco":
-            edf = _locals.get("edf_val", "Todos")
-            cat = _locals.get("cat_val", "Todos")
-            opts = ["Todos"] + get_espacos(edificio=edf if edf != "Todos" else None, categoria=cat if cat != "Todos" else None, only_labs=is_lab)
-            _locals[vkey] = st.selectbox("Sala", opts, key=sk)
+            edf = vals.get("edificio",        Sentinel.NO_FILTER)
+            cat = vals.get("categoria_espaco", Sentinel.NO_FILTER)
+            opts = [Sentinel.NO_FILTER] + get_espacos(
+                edificio=edf if edf != Sentinel.NO_FILTER else None,
+                categoria=cat if cat != Sentinel.NO_FILTER else None,
+                only_labs=is_lab,
+            )
+            vals["espaco"] = st.selectbox("Sala", opts, key=SessionKeys.ESPACO)
         elif wname == "ciclo_estudo":
-            _locals[vkey] = st.selectbox("Ciclo Estudo", ["Todos"] + get_ciclos_estudo(only_labs=is_lab), key=sk)
+            vals["ciclo_estudo"] = st.selectbox(
+                "Ciclo Estudo",
+                [Sentinel.NO_FILTER] + get_ciclos_estudo(only_labs=is_lab),
+                key=SessionKeys.CICLO,
+            )
         elif wname == "epoca":
-            _locals[vkey] = st.selectbox("Período/Época", ["Todos"] + get_epocas(), key=sk)
+            vals["epoca"] = st.selectbox(
+                "Período/Época", [Sentinel.NO_FILTER] + get_epocas(), key=SessionKeys.EPOCA
+            )
         elif wname == "curso":
-            ciclo = _locals.get("ciclo_val", "Todos")
-            ciclo = ciclo if ciclo != "Todos" else None
-            _locals[vkey] = st.selectbox("Curso", ["Todos"] + get_cursos(ciclo=ciclo, only_labs=is_lab), key=sk)
+            ciclo = vals.get("ciclo_estudo", Sentinel.NO_FILTER)
+            ciclo = ciclo if ciclo != Sentinel.NO_FILTER else None
+            vals["curso"] = st.selectbox(
+                "Curso",
+                [Sentinel.NO_FILTER] + get_cursos(ciclo=ciclo, only_labs=is_lab),
+                key=SessionKeys.CURSO,
+            )
         elif wname == "uc":
-            curso = _locals.get("curso_val", "Todos")
-            curso = curso if curso != "Todos" else None
-            _locals[vkey] = st.selectbox("UC", ["Todos"] + get_ucs(curso=curso, only_labs=is_lab), key=sk)
+            curso = vals.get("curso", Sentinel.NO_FILTER)
+            curso = curso if curso != Sentinel.NO_FILTER else None
+            vals["uc"] = st.selectbox(
+                "UC",
+                [Sentinel.NO_FILTER] + get_ucs(curso=curso, only_labs=is_lab),
+                key=SessionKeys.UC,
+            )
         elif wname == "hide_online":
             st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
-            _locals[vkey] = st.checkbox("Excluir Online", value=False, key="v4_toggle_online")
+            vals["hide_online"] = st.checkbox("Excluir Online", value=False, key=SessionKeys.HIDE_ONLINE)
         elif wname == "hide_ghost":
-            _locals[vkey] = st.checkbox("Ocultar Ghost", value=False, key="v4_toggle_ghost")
+            vals["hide_ghost"] = st.checkbox("Ocultar Ghost", value=False, key=SessionKeys.HIDE_GHOST)
         elif wname == "hide_concurrent":
-            _locals[vkey] = st.checkbox("Deduplicar Concurrentes", value=False, key="v4_toggle_concurrent")
+            vals["hide_concurrent"] = st.checkbox(
+                "Deduplicar Concurrentes", value=False, key=SessionKeys.HIDE_CONCURRENT
+            )
 
-# ─── Build filters dict from widget locals ───────────────────────
-def _extract_filters(locals_dict):
-    f = {}
-    if locals_dict.get("ano_val", "Todos") != "Todos": f["ano_letivo"] = locals_dict["ano_val"]
-    if locals_dict.get("sem_val", "Todos") != "Todos": f["semestre"] = int(locals_dict["sem_val"])
-    if locals_dict.get("dept_val", "Todos") != "Todos": f["departamento"] = locals_dict["dept_val"]
-    if locals_dict.get("cat_val", "Todos") != "Todos": f["categoria_espaco"] = locals_dict["cat_val"]
-    if locals_dict.get("edf_val", "Todos") != "Todos": f["edificio"] = locals_dict["edf_val"]
-    if locals_dict.get("esp_val", "Todos") != "Todos": f["espaco"] = locals_dict["esp_val"]
-    if locals_dict.get("ciclo_val", "Todos") != "Todos": f["ciclo_estudo"] = locals_dict["ciclo_val"]
-    if locals_dict.get("curso_val", "Todos") != "Todos": f["curso"] = locals_dict["curso_val"]
-    if locals_dict.get("uc_val", "Todos") != "Todos": f["uc"] = locals_dict["uc_val"]
-    if locals_dict.get("epoca_val", "Todos") != "Todos": f["epoca"] = locals_dict["epoca_val"]
-    f["hide_online"] = locals_dict.get("hide_online", False)
-    f["hide_concurrent"] = locals_dict.get("hide_concurrent", False)
-    f["hide_ghost"] = locals_dict.get("hide_ghost", False)
+    return vals
+
+
+def _extract_filters(vals: dict) -> Filters:
+    """
+    Convert raw widget values into a typed Filters dict.
+    Only non-default values are included (None / False stay absent
+    so downstream functions can use 'if filter.get(key)' safely).
+    """
+    NF = Sentinel.NO_FILTER
+
+    def _v(key: str):
+        val = vals.get(key)
+        return val if val and val != NF else None
+
+    f: Filters = {}
+    if _v("ano_letivo"):        f["ano_letivo"]       = _v("ano_letivo")
+    if _v("semestre"):          f["semestre"]         = int(_v("semestre"))
+    if _v("escola"):            f["escola"]           = _v("escola")
+    if _v("departamento"):      f["departamento"]     = _v("departamento")
+    if _v("categoria_espaco"):  f["categoria_espaco"] = _v("categoria_espaco")
+    if _v("edificio"):          f["edificio"]         = _v("edificio")
+    if _v("espaco"):            f["espaco"]           = _v("espaco")
+    if _v("ciclo_estudo"):      f["ciclo_estudo"]     = _v("ciclo_estudo")
+    if _v("curso"):             f["curso"]            = _v("curso")
+    if _v("uc"):                f["uc"]               = _v("uc")
+    if _v("epoca"):             f["epoca"]            = _v("epoca")
+    f["hide_online"]     = bool(vals.get("hide_online",     False))
+    f["hide_concurrent"] = bool(vals.get("hide_concurrent", False))
+    f["hide_ghost"]      = bool(vals.get("hide_ghost",      False))
     return f
 
-# ─── Sidebar: Contextual Filters + User ──────────────────────────
+
+# ── Sidebar ───────────────────────────────────────────────────────────
 with st.sidebar:
     st.markdown('<div class="sidebar-title">🔍 Filtros</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
-    is_lab_profile = (profile == "Laboratórios")
-    _locals = {}
-    _render_filters(profile)
+    raw_vals = _render_filters(profile)
 
-    # ── Active filters string ────────────────────────────────────
-    st.markdown(f'<div class="active-filters">{_build_active_string(_locals)}</div>', unsafe_allow_html=True)
-
-    # ── Reset + User footer ──────────────────────────────────────
+    st.markdown(
+        f'<div class="active-filters">{_build_active_string(raw_vals)}</div>',
+        unsafe_allow_html=True,
+    )
     st.button("Limpar Filtros", use_container_width=True, on_click=_reset_filters)
     st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown(f"**{st.session_state.get('username', '—')}**")
-    if st.button("Terminar Sessao", use_container_width=True, type="primary"):
+    if st.button("Terminar Sessão", use_container_width=True, type="primary"):
         logout()
     st.markdown("---")
 
-# ─── Build filters dict ──────────────────────────────────────────
-filters = _extract_filters(_locals)
-filters["only_labs"] = is_lab_profile
+# ── Build typed filters dict ──────────────────────────────────────────
+filters: Filters = _extract_filters(raw_vals)
+filters["only_labs"] = (profile == "Laboratórios")
 
 st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-# ─── Route to profile ────────────────────────────────────────────
-if profile == "Visão Geral":
-    render_profile_a_general(filters)
-elif profile == "Laboratórios":
-    render_profile_b_labs(filters)
-elif profile == "Detalhe Sala":
-    render_profile_c_spaces(filters)
-elif profile == "Alertas":
-    render_profile_e_alerts(filters)
-elif profile == "Comparação":
-    render_profile_f_comparison(filters)
-elif profile == "Qualidade":
-    render_profile_d_quality(filters)
-elif profile == "Salas Vazias":
-    render_profile_g_empty_rooms(filters)
+# ── Profile dispatch ──────────────────────────────────────────────────
+_PROFILE_REGISTRY: dict[str, type] = {
+    "Visão Geral":   GeneralProfile,
+    "Laboratórios":  LabsProfile,
+    "Detalhe Sala":  SpaceDetailProfile,
+    "Alertas":       AlertsProfile,
+    "Comparação":    ComparisonProfile,
+    "Qualidade":     QualityProfile,
+    "Salas Vazias":  EmptyRoomsProfile,
+}
+
+if profile in _PROFILE_REGISTRY:
+    _PROFILE_REGISTRY[profile]().render(filters)

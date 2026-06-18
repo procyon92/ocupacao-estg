@@ -106,7 +106,7 @@ class LabsProfile(BaseProfile):
         q50 = summary["Sessoes"].quantile(0.50)
         summary["Horas_Total"]     = (summary["Horas_Total"] / 60).round(0).astype(int)
         summary["Media_Presencas"] = summary["Media_Presencas"].round(1)
-        summary["Media_Horas"]     = (summary["Media_Horas"] / 60).apply(fmt_duration_long)
+        summary["Media_Horas"] = summary["Media_Horas"].apply(fmt_duration_long)
         summary["Carga"] = summary["Sessoes"].apply(
             lambda x: "🔴 Alta" if x > q75 else "🟡 Média" if x > q50 else "🟢 Baixa"
         )

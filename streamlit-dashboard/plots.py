@@ -127,7 +127,7 @@ def chart_top_espacos(df: pd.DataFrame, top_n: int = 10) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, f"Top {top_n} Espaços")
+        return _base_layout(fig, f"Espaços com maior ocupação")
 
     top = (df[df["Nome_Espaco"] != "N/D"].groupby("Nome_Espaco").size().reset_index(name="Total").sort_values("Total", ascending=True).tail(top_n))
     fig = go.Figure(go.Bar(
@@ -137,7 +137,7 @@ def chart_top_espacos(df: pd.DataFrame, top_n: int = 10) -> go.Figure:
         textfont=dict(size=11, color="#1B2139"),
         hovertemplate="<b>%{y}</b><br>Total: %{x:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, f"Top {top_n} Espaços", height=400)
+    fig = _base_layout(fig, f"Espaços com maior ocupação", height=400)
     fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
     fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155")) # cor das labels 
     return fig
@@ -147,7 +147,7 @@ def chart_bottom_espacos(df: pd.DataFrame, bottom_n: int = 10) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, f"Bottom {bottom_n} Espaços")
+        return _base_layout(fig, f"Espaços com menor ocupação")
 
     bottom = (df[df["Nome_Espaco"] != "N/D"].groupby("Nome_Espaco").size().reset_index(name="Total").sort_values("Total", ascending=True).head(bottom_n))
     fig = go.Figure(go.Bar(
@@ -157,7 +157,7 @@ def chart_bottom_espacos(df: pd.DataFrame, bottom_n: int = 10) -> go.Figure:
         textfont=dict(size=11, color="#1B2139"),
         hovertemplate="<b>%{y}</b><br>Total: %{x:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, f"Bottom {bottom_n} Espaços", height=400)
+    fig = _base_layout(fig, f"Espaços com menor ocupação", height=400)
     fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155")) # cor das labels 
     fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155"), autorange="reversed") # cor das labels 
     return fig

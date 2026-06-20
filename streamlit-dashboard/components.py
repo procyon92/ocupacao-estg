@@ -26,7 +26,8 @@ def render_kpi(label: str, value: str, icon: str = "", tooltip: str = "") -> Non
     st.markdown(f"""
     <div {title_attr} style="background:{COLORS['kpi_bg']};border-radius:14px;
                 padding:1.3rem 1.5rem;height:110px;display:flex;flex-direction:column;
-                justify-content:center;border:1px solid #E8EDF5;{cursor}">
+                justify-content:center;border:2px solid #A8B8E8;
+                box-shadow:0 2px 8px rgba(59,99,251,0.10);{cursor}">
         <span style="color:{COLORS['kpi_label']};font-size:0.82rem;font-weight:500;
                     letter-spacing:0.02em;">{icon} {label}</span>
         <span style="color:{COLORS['kpi_value']};font-size:2rem;font-weight:700;

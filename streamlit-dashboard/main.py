@@ -1,14 +1,7 @@
 """
 main.py — Entry point.
-
-What changed vs the original:
-  - _locals is NO LONGER a module-level mutable dict mutated by a function.
-    _render_filters() now returns a dict. Clean, refactor-safe.
-  - All session_state keys use SessionKeys constants (no scattered string literals).
-  - _reset_filters iterates SessionKeys.RESETTABLE — complete by construction.
-  - Profile routing uses a dispatch dict instead of an if/elif chain.
-  - CSS is loaded from assets/style.css (zero logic in this file).
-  - Filters TypedDict provides a formal contract between main and profiles.
+Handles authentication, navigation, and shared filter state.
+Delegates actual rendering to profile classes in profiles/.
 """
 from __future__ import annotations
 import sys, os
@@ -46,6 +39,17 @@ _CSS_PATH = os.path.join(os.path.dirname(__file__), "assets", "style.css")
 with open(_CSS_PATH) as _f:
     st.markdown(f"<style>{_f.read()}</style>", unsafe_allow_html=True)
 
+# ── Margens laterais ──────────────────────────────────────────────────
+st.markdown("""
+<style>
+html body section[data-testid="stMain"] .block-container {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    max-width: 100% !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 # ── Auth ──────────────────────────────────────────────────────────────
 if not check_auth():
     login_page()
@@ -57,18 +61,17 @@ PROFILE_LABELS = [
     "Salas Vazias", "Alertas", "Comparação", "Qualidade",
 ]
 
-nav_cols = st.columns([1, 5, 1])
+nav_cols = st.columns([7, 1])
 with nav_cols[0]:
-    st.markdown(f"**{APP_TITLE}**")
-with nav_cols[1]:
     profile = st.segmented_control(
         "Navegação", options=PROFILE_LABELS, default=PROFILE_LABELS[0],
         label_visibility="collapsed", key=SessionKeys.NAV, selection_mode="single",
     )
-with nav_cols[2]:
-    st.markdown(f"👤 {st.session_state.get('username', '—')}")
-
-st.markdown("<div style='height:0.3rem'></div>", unsafe_allow_html=True)
+with nav_cols[1]:
+    st.markdown(
+        f"<div class='nav-user'>👤 {st.session_state.get('username', '—')}</div>",
+        unsafe_allow_html=True,
+    )
 
 # ── Shared data ───────────────────────────────────────────────────────
 _ANOS = get_anos_letivos()
@@ -113,8 +116,6 @@ _PROFILE_WIDGETS: dict[str, list[str]] = {
 
 # ── Reset callback ────────────────────────────────────────────────────
 def _reset_filters() -> None:
-    """Reset all filter session keys to their defaults.
-    Uses SessionKeys.RESETTABLE so this list is always complete."""
     anos = get_anos_letivos()
     month = datetime.now().month
     defaults = {
@@ -157,13 +158,8 @@ def _build_active_string(vals: dict) -> str:
     return " | ".join(parts) if parts else "Sem filtros ativos"
 
 
-# ── Filter renderer — returns a dict instead of mutating a global ──────
+# ── Filter renderer ───────────────────────────────────────────────────
 def _render_filters(profile: str) -> dict:
-    """
-    Render sidebar widgets for the current profile.
-    Returns a plain dict of raw widget values (pre-extraction).
-    No side effects on module-level state.
-    """
     fw       = _PROFILE_WIDGETS[profile]
     is_lab   = profile == "Laboratórios"
     vals: dict = {}
@@ -288,11 +284,6 @@ def _render_filters(profile: str) -> dict:
 
 
 def _extract_filters(vals: dict) -> Filters:
-    """
-    Convert raw widget values into a typed Filters dict.
-    Only non-default values are included (None / False stay absent
-    so downstream functions can use 'if filter.get(key)' safely).
-    """
     NF = Sentinel.NO_FILTER
 
     def _v(key: str):
@@ -324,10 +315,6 @@ with st.sidebar:
 
     raw_vals = _render_filters(profile)
 
-    st.markdown(
-        f'<div class="active-filters">{_build_active_string(raw_vals)}</div>',
-        unsafe_allow_html=True,
-    )
     st.button("Limpar Filtros", use_container_width=True, on_click=_reset_filters)
     st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
     st.markdown("---")
@@ -340,7 +327,15 @@ with st.sidebar:
 filters: Filters = _extract_filters(raw_vals)
 filters["only_labs"] = (profile == "Laboratórios")
 
-st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
+# ── Filtros ativos — barra no topo da página ──────────────────────────
+_active_str = _build_active_string(raw_vals)
+if _active_str != "Sem filtros ativos":
+    st.markdown(
+        f"<h4 style='color:#1B2139;font-weight:700;margin-bottom:0.3rem;'>Filtros aplicados</h4>"
+        f'<div class="page-active-filters">{_active_str}</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
 # ── Profile dispatch ──────────────────────────────────────────────────
 _PROFILE_REGISTRY: dict[str, type] = {

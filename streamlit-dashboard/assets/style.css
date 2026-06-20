@@ -1,4 +1,4 @@
-/* ESTG Dashboard — extracted from main.py */
+/* Dashboard — assets/style.css */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 html, body, [data-testid="stApp"] {
@@ -8,10 +8,12 @@ html, body, [data-testid="stApp"] {
 .main .block-container {
     padding-top: 1rem;
     padding-bottom: 2rem;
-    max-width: 1400px;
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+    max-width: 100% !important;
 }
 
-/* Sidebar */
+/* ── Sidebar ─────────────────────────────────────────────────────────── */
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1B2139 0%, #141929 100%) !important;
     min-width: 230px !important;
@@ -40,7 +42,7 @@ header[data-testid="stHeader"] {
     display: none !important;
 }
 .block-container {
-    padding-top: 5rem !important;
+    padding-top: 4rem !important;
 }
 [data-testid="stSidebar"] * {
     color: white !important;
@@ -53,19 +55,70 @@ header[data-testid="stHeader"] {
     font-weight: 500 !important;
 }
 
-/* Hide Streamlit chrome */
+/* Sidebar selectbox */
+[data-testid="stSidebar"] .stSelectbox > div > div {
+    border-radius: 8px !important;
+    border-color: rgba(255,255,255,0.15) !important;
+    background: rgba(255,255,255,0.08) !important;
+}
+[data-testid="stSidebar"] .stCheckbox {
+    margin-top: -0.4rem;
+}
+
+/* ── Hide Streamlit chrome ───────────────────────────────────────────── */
 #MainMenu { visibility: hidden; }
 footer    { visibility: hidden; }
 
-/* Metric cards */
-[data-testid="stMetric"] {
-    background: #F6F8FC;
-    border-radius: 14px;
-    padding: 1.2rem 1.5rem;
-    border: 1px solid #E8EDF5;
+/* ── Navigation — segmented control ────────────────────────────────── */
+[data-testid="stSegmentedControl"] {
+    gap: 0.2rem !important;
+    flex-wrap: nowrap !important;
 }
 
-/* Buttons */
+/* Target every pill button inside the control */
+[data-testid="stSegmentedControl"] button,
+[data-testid="stSegmentedControl"] [role="radio"] {
+    font-size: 1.05rem !important;
+    font-weight: 600 !important;
+    padding: 0.65rem 1.6rem !important;
+    min-height: 2.6rem !important;
+    border-radius: 10px !important;
+    letter-spacing: 0.01em !important;
+    white-space: nowrap !important;
+    transition: all 0.18s ease !important;
+}
+[data-testid="stSegmentedControl"] button:hover,
+[data-testid="stSegmentedControl"] [role="radio"]:hover {
+    box-shadow: 0 3px 10px rgba(59,99,251,0.18) !important;
+}
+
+/* User badge */
+.nav-user {
+    text-align: right;
+    font-size: 0.88rem;
+    font-weight: 500;
+    color: #64748B;
+    padding-top: 0.6rem;
+    white-space: nowrap;
+}
+
+/* ── Metric cards ────────────────────────────────────────────────────── */
+html body [data-testid="stMetric"] {
+    background: #F6F8FC !important;
+    border-radius: 14px !important;
+    padding: 1.2rem 1.5rem !important;
+    border: 2px solid #A8B8E8 !important;
+    box-shadow: 0 2px 8px rgba(59,99,251,0.10) !important;
+}
+html body [data-testid="stMetricValue"] > div,
+html body [data-testid="stMetric"] > div > div {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    background: transparent !important;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────── */
 .stButton > button {
     border-radius: 10px !important;
     font-weight: 600 !important;
@@ -87,23 +140,29 @@ footer    { visibility: hidden; }
     border-color: rgba(255,255,255,0.35) !important;
 }
 
-/* Sidebar selectbox */
-[data-testid="stSidebar"] .stSelectbox > div > div {
-    border-radius: 8px !important;
-    border-color: rgba(255,255,255,0.15) !important;
-    background: rgba(255,255,255,0.08) !important;
-}
-[data-testid="stSidebar"] .stCheckbox {
-    margin-top: -0.4rem;
-}
-
-/* Inputs */
+/* ── Inputs ──────────────────────────────────────────────────────────── */
 .stSelectbox, .stDateInput, .stMultiSelect {
     font-size: 0.88rem !important;
 }
+
+/* Selectbox / multiselect — border mais destacado */
+.stSelectbox > div > div,
+.stMultiSelect > div > div {
+    border: 2px solid #C7D2E8 !important;
+    border-radius: 10px !important;
+    box-shadow: 0 1px 4px rgba(59,99,251,0.06) !important;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease !important;
+}
+.stSelectbox > div > div:focus-within,
+.stMultiSelect > div > div:focus-within {
+    border-color: #3B63FB !important;
+    box-shadow: 0 0 0 3px rgba(59,99,251,0.12) !important;
+}
+
+/* Radio pills */
 .main .stRadio > div { gap: 0.3rem !important; }
 .main .stRadio label {
-    border: 1px solid #E2E8F0 !important;
+    border: 2px solid #C7D2E8 !important;
     border-radius: 8px !important;
     padding: 0.4rem 1rem !important;
     font-size: 0.82rem !important;
@@ -111,20 +170,20 @@ footer    { visibility: hidden; }
     transition: all 0.2s ease !important;
 }
 
-/* Charts */
+/* ── Charts ──────────────────────────────────────────────────────────── */
 [data-testid="stPlotlyChart"] {
     background: white;
     border-radius: 16px;
     padding: 0.8rem;
-    border: 1px solid #E8EDF5;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    border: 2px solid #A8B8E8;
+    box-shadow: 0 2px 8px rgba(59,99,251,0.08);
 }
 [data-testid="stDataFrame"] {
     border-radius: 12px;
     overflow: hidden;
 }
 
-/* Download button */
+/* ── Download button ─────────────────────────────────────────────────── */
 .stDownloadButton > button {
     background: linear-gradient(135deg, #3B63FB, #2246D4) !important;
     color: white !important;
@@ -136,7 +195,7 @@ footer    { visibility: hidden; }
     transform: translateY(-1px);
 }
 
-/* Sidebar text */
+/* ── Sidebar text helpers ────────────────────────────────────────────── */
 .sidebar-title {
     font-size: 1.1rem;
     font-weight: 800;
@@ -169,4 +228,21 @@ footer    { visibility: hidden; }
     color: rgba(255,255,255,0.7);
     line-height: 1.4;
     margin: 0.3rem 0;
+}
+
+/* ── Filtros ativos — barra no topo da página ────────────────────────── */
+.page-active-filters {
+    display: inline-flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.4rem 1.0rem;
+    background: #EEF2FF;
+    border: 1.5px solid #A8B8E8;
+    border-radius: 12px;
+    padding: 0.65rem 1.2rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+    color: #3B4B8C;
+    margin-bottom: 0.2rem;
+    line-height: 1.6;
 }

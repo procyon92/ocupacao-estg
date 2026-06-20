@@ -240,12 +240,18 @@ def get_dias_semana() -> list[str]:
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_semanas(ano_letivo: str | None = None, semestre: int | None = None) -> list[int]:
+    """
+    Devolve as semanas letivas disponíveis (Numero_Semana_Escolar).
+    Semana 0 é excluída — corresponde a dias antes do início do semestre.
+    Filtrado por ano letivo e semestre para que o dropdown mostre
+    apenas as semanas relevantes para a seleção atual.
+    """
     conn = get_connection()
     try:
         sql = (
-            "SELECT DISTINCT d.Numero_Semana AS val "
+            "SELECT DISTINCT d.Numero_Semana_Escolar AS val "
             "FROM Facto_Ocupacao f JOIN Dim_Data d ON f.SK_Data = d.SK_Data "
-            "WHERE d.Numero_Semana != 0"
+            "WHERE d.Numero_Semana_Escolar > 0"
         )
         params: list = []
         if ano_letivo:
@@ -300,6 +306,7 @@ _FACT_SELECT = """
         d.DiaSemana,
         d.Semestre,
         d.Numero_Semana,
+        d.Numero_Semana_Escolar,
         d.Tipo_Dia,
         ep.Descricao_Epoca,
         h1.Hora   AS Hora_Inicio,
@@ -354,30 +361,35 @@ def get_filtered_data(
     curso: str | None = None,
     uc: str | None = None,
     epoca: str | None = None,
+    semana_escolar: int | None = None,
     only_labs: bool = False,
 ) -> pd.DataFrame:
     """
     Returns raw fact rows matching the given filters.
     Post-query filtering (hide_online, hide_ghost, hide_concurrent)
     is done separately in transforms.apply_post_filters().
+
+    semana_escolar filtra por Numero_Semana_Escolar (semana letiva real,
+    contada a partir do início do semestre académico).
     """
     conn = get_connection()
     try:
         sql = _FACT_SELECT
         params: list = []
 
-        if ano_letivo:       sql += " AND d.Ano_Escolar = %s";        params.append(ano_letivo)
-        if semestre:         sql += " AND d.Semestre = %s";            params.append(semestre)
-        if escola:           sql += " AND e.Escola_Responsavel = %s";  params.append(escola)
-        if departamento:     sql += " AND e.Departamento = %s";        params.append(departamento)
-        if edificio:         sql += " AND e.Edificio = %s";            params.append(edificio)
-        if categoria_espaco: sql += " AND e.Categoria_Espaco = %s";    params.append(categoria_espaco)
-        if espaco:           sql += " AND e.Nome_Espaco = %s";         params.append(espaco)
-        if ciclo_estudo:     sql += " AND uc.Ciclo_Estudo = %s";       params.append(ciclo_estudo)
-        if curso:            sql += " AND c.Nome_Curso = %s";          params.append(curso)
-        if uc:               sql += " AND uc.Designacao_UC = %s";      params.append(uc)
-        if epoca:            sql += " AND ep.Descricao_Epoca = %s";    params.append(epoca)
-        if only_labs:        sql += " AND e.Categoria_Espaco = %s";    params.append(LAB_CATEGORY)
+        if ano_letivo:        sql += " AND d.Ano_Escolar = %s";              params.append(ano_letivo)
+        if semestre:          sql += " AND d.Semestre = %s";                  params.append(semestre)
+        if escola:            sql += " AND e.Escola_Responsavel = %s";        params.append(escola)
+        if departamento:      sql += " AND e.Departamento = %s";              params.append(departamento)
+        if edificio:          sql += " AND e.Edificio = %s";                  params.append(edificio)
+        if categoria_espaco:  sql += " AND e.Categoria_Espaco = %s";          params.append(categoria_espaco)
+        if espaco:            sql += " AND e.Nome_Espaco = %s";               params.append(espaco)
+        if ciclo_estudo:      sql += " AND uc.Ciclo_Estudo = %s";             params.append(ciclo_estudo)
+        if curso:             sql += " AND c.Nome_Curso = %s";                params.append(curso)
+        if uc:                sql += " AND uc.Designacao_UC = %s";            params.append(uc)
+        if epoca:             sql += " AND ep.Descricao_Epoca = %s";          params.append(epoca)
+        if semana_escolar:    sql += " AND d.Numero_Semana_Escolar = %s";     params.append(semana_escolar)
+        if only_labs:         sql += " AND e.Categoria_Espaco = %s";          params.append(LAB_CATEGORY)
 
         return _safe_read(sql, conn, params)
     finally:
@@ -389,6 +401,7 @@ def get_space_detail_data(
     space_name: str,
     ano_escolar: str | None = None,
     semestre: int | None = None,
+    semana_escolar: int | None = None,
 ) -> pd.DataFrame:
     conn = get_connection()
     try:
@@ -406,7 +419,8 @@ def get_space_detail_data(
                 ea.Estado,
                 t.Designacao_Turno,
                 ep.Descricao_Epoca,
-                d.Ano_Escolar, d.Semestre
+                d.Ano_Escolar, d.Semestre,
+                d.Numero_Semana_Escolar
             FROM Facto_Ocupacao f
             JOIN Dim_Data d                ON f.SK_Data                = d.SK_Data
             JOIN Dim_Hora h1               ON f.SK_Hora_Inicio         = h1.SK_Hora
@@ -423,9 +437,11 @@ def get_space_detail_data(
         """
         params: list = [space_name]
         if ano_escolar:
-            sql += " AND d.Ano_Escolar = %s"; params.append(ano_escolar)
+            sql += " AND d.Ano_Escolar = %s";           params.append(ano_escolar)
         if semestre is not None:
-            sql += " AND d.Semestre = %s"; params.append(semestre)
+            sql += " AND d.Semestre = %s";              params.append(semestre)
+        if semana_escolar is not None:
+            sql += " AND d.Numero_Semana_Escolar = %s"; params.append(semana_escolar)
         sql += " ORDER BY d.DataCompleta, h1.Hora, h1.Minuto"
         return _safe_read(sql, conn, params)
     finally:
@@ -523,7 +539,6 @@ def get_etl_quality_metrics() -> dict[str, int]:
         cursor.execute("SELECT COUNT(*) FROM Facto_Ocupacao")
         total: int = cursor.fetchone()[0]
 
-        # Fully parameterized — no f-string value interpolation
         cursor.execute(
             """
             SELECT COUNT(*) FROM Facto_Ocupacao f

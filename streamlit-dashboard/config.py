@@ -1,68 +1,86 @@
 """
-config.py — Configuração centralizada do Dashboard.
-Define constantes de estilo, paleta de cores, e credenciais de BD.
+config.py — Centralized configuration: DB, UI constants, cache TTLs, sentinel values.
 """
-import os
-from dotenv import load_dotenv
+from __future__ import annotations
 
-# Carrega .env da raiz do ETL
-load_dotenv(os.path.join(os.path.dirname(__file__), '..', '.env'))
+# ── Application ──────────────────────────────────────────────────────
+APP_TITLE = "ESTG Dashboard"
+PAGE_TITLE = "ESTG — Ocupação de Espaços"
+FAVICON = "🏫"
 
-# ─── Conexão MySQL ───────────────────────────────────────────────────
-DB_CONFIG = {
-    "host": os.getenv("DB_HOST", "localhost"),
-    "port": int(os.getenv("DB_PORT", 3306)),
-    "user": os.getenv("DB_USER", "root"),
-    "password": os.getenv("DB_PASSWORD", ""),
-    "database": os.getenv("DB_NAME", "dw_ocupacao"),
+# ── Database ─────────────────────────────────────────────────────────
+DB_CONFIG: dict = {
+    "host": "localhost",
+    "port": 3306,
+    "user": "root",
+    "password": "",
+    "database": "dw_ocupacao",
     "charset": "utf8mb4",
 }
 
-# ─── Paleta de Cores ─────────────────────────────────────────────────
-COLORS = {
-    # Sidebar
-    "sidebar_bg": "#1B2139",
-    "sidebar_text": "#FFFFFF",
-    "sidebar_active": "#3B63FB",
-    # KPIs
-    "kpi_bg": "#F6F8FC",
-    "kpi_label": "#7B8AA6",
-    "kpi_value": "#1B2139",
-    # Charts
-    "primary": "#3B63FB",
-    "secondary": "#22D3EE",
-    "accent": "#F59E0B",
-    "success": "#10B981",
-    "danger": "#EF4444",
-    "warning": "#F59E0B",
-    "chart_bg": "#F6F8FC",
-    "chart_grid": "#E2E8F0",
-    # Status badges
-    "badge_green": "#D1FAE5",
-    "badge_green_text": "#065F46",
-    "badge_yellow": "#FEF3C7",
-    "badge_yellow_text": "#92400E",
-    "badge_red": "#FEE2E2",
-    "badge_red_text": "#991B1B",
-    # Donut
-    "donut_palette": [
-        "#3B63FB", "#22D3EE", "#F59E0B", "#10B981",
-        "#EF4444", "#8B5CF6", "#EC4899", "#6366F1",
-        "#14B8A6", "#F97316", "#84CC16", "#06B6D4",
-    ],
-    # Quality section
-    "quality_green": "#D1FAE5",
-    "quality_yellow": "#FEF3C7",
-    "quality_red": "#FEE2E2",
+# ── Cache TTLs (seconds) ──────────────────────────────────────────────
+CACHE_TTL_HOT  = 60    # real-time: free rooms, raw anomalies
+CACHE_TTL_WARM = 120   # semi-dynamic: filtered fact data
+CACHE_TTL_COLD = 300   # mostly static: dim lookups, quality metrics
+
+# ── Sentinel / placeholder values ─────────────────────────────────────
+class Sentinel:
+    """String constants used as 'unknown' markers in the data warehouse."""
+    ND          = "N/D"
+    INDEFINIDO  = "Indefinido/N.D."
+    SEM_UNIDADE = "SEM_UNIDADE / RESERVA_ADMIN"
+    NO_FILTER   = "Todos"
+    NO_FILTER_F = "Todas"
+    ALL_DEPTS   = "— Todos os departamentos —"
+    NO_ROOM     = "— Selecione um espaço —"
+
+    BAD_DOCENTES: tuple = ("N/D", "Indefinido/N.D.")
+    BAD_UCS: tuple      = ("N/D", "SEM_UNIDADE / RESERVA_ADMIN")
+
+# ── Authentication ───────────────────────────────────────────────────
+# Edit these credentials or load from environment variables / secrets.
+# Streamlit Cloud: use st.secrets["auth"] instead.
+AUTH_CREDENTIALS: dict[str, str] = {
+    "admin": "estg2025",
 }
 
-# ─── Layout ──────────────────────────────────────────────────────────
-APP_TITLE = "Gestão de Ocupação"
-PAGE_TITLE = "Dashboard — Análise de Ocupação ESTG"
-FAVICON = "📊"
+# Alias kept for backwards compatibility with auth.py variants that use AUTH_USERS
+AUTH_USERS = AUTH_CREDENTIALS
 
-# ─── Credenciais de Acesso (Demonstração) ────────────────────────────
-AUTH_USERS = {
-    "admin": "estg2025",
-    "docente": "estg2025",
+# ── Category constants ────────────────────────────────────────────────
+DAILY_CAPACITY_MINUTES = 960 # 16 horas -> 8h às 24h, para cálculo de ocupação relativa
+
+LAB_CATEGORY = "Laboratório"
+
+WEEKDAY_ORDER = (
+    "Segunda-feira", "Terça-feira", "Quarta-feira",
+    "Quinta-feira", "Sexta-feira", "Sábado",
+)
+
+COLORS = {
+    # KPI cards
+    "kpi_bg":       "#FFFFFF",
+    "kpi_label":    "#64748B",
+    "kpi_value":    "#1B2139",
+    # Charts — usados em plots.py
+    "primary":      "#3B63FB",
+    "chart_grid":   "#E8EDF5",
+    "donut_palette": [
+        "#3B63FB", "#10B981", "#F59E0B", "#EF4444",
+        "#8B5CF6", "#06B6D4", "#F97316", "#EC4899",
+        "#14B8A6", "#84CC16", "#6366F1", "#FB923C",
+    ],
+}
+
+DIMENSION_COVERAGE_COLS: dict = {
+    "Edifício":       "Edificio",
+    "Espaço":         "Nome_Espaco",
+    "Categoria":      "Categoria_Espaco",
+    "UC":             "Designacao_UC",
+    "Ciclo Estudo":   "Ciclo_Estudo",
+    "Curso":          "Nome_Curso",
+    "Tipo Atividade": "Designacao_Atividade",
+    "Responsável":    "Docente_Responsavel",
+    "Estado":         "Estado",
+    "Turno":          "Designacao_Turno",
 }

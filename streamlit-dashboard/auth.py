@@ -2,6 +2,8 @@
 auth.py — Módulo de autenticação simples para o Dashboard.
 Implementa login com session_state do Streamlit.
 """
+import os
+import base64
 import streamlit as st
 from config import AUTH_USERS
 
@@ -11,79 +13,112 @@ def check_auth() -> bool:
     return st.session_state.get("authenticated", False)
 
 
+def _img_to_b64(path: str) -> str:
+    """Converte uma imagem para base64 para embedding inline em HTML."""
+    with open(path, "rb") as f:
+        return base64.b64encode(f.read()).decode()
+
+
 def login_page():
-    """Renderiza a página de login — card centrado com fundo gradiente."""
+    """Renderiza a página de login — card centrado com fundo claro."""
     st.markdown("""
     <style>
         [data-testid="stSidebar"] { display: none; }
+
         [data-testid="stAppViewContainer"] > .main,
         .stApp {
-            background: linear-gradient(135deg, #1B2139 0%, #141929 100%) !important;
+            background: #F1F5F9 !important;
         }
+
         .stApp > header { display: none; }
 
-        /* Hide the intrusive "Press Enter to apply" instruction */
         [data-testid="InputInstructions"] {
             display: none !important;
         }
 
-        /* Style the middle column as the login card */
+        /* Card central */
         [data-testid="column"]:nth-of-type(2) {
             max-width: 420px !important;
-            margin: 10vh auto !important;
-            background: white !important;
+            margin: 8vh auto !important;
+            background: #FFFFFF !important;
             border-radius: 20px !important;
             padding: 2.8rem 2.2rem !important;
-            box-shadow: 0 25px 50px rgba(0,0,0,0.25) !important;
+            box-shadow: 0 4px 24px rgba(0,0,0,0.08) !important;
+            border: 1px solid #E2E8F0 !important;
         }
 
-        /* Logo text */
-        .login-logo {
-            text-align: center;
-            font-size: 2.4rem;
-            font-weight: 800;
-            background: linear-gradient(135deg, #3B63FB, #22D3EE);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            margin-bottom: 0.2rem;
-        }
         .login-subtitle {
             text-align: center;
             color: #7B8AA6;
-            font-size: 0.95rem;
-            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
+            margin-top: 0.3rem;
+            margin-bottom: 1.8rem;
         }
 
-        /* Labels inside the form */
+        /* Labels do form */
         [data-testid="stForm"] label p {
             color: #1B2139 !important;
             font-weight: 600 !important;
             font-size: 0.85rem !important;
         }
 
-        /* Text inputs inside the card column */
-        [data-testid="column"]:nth-of-type(2) input {
-            color: #1B2139 !important;
-            background: #F8FAFC !important;
-            border: 1px solid #E2E8F0 !important;
+        /* Caixa visível — cada lado explícito para sobrescrever as classes do Streamlit */
+        [data-testid="column"]:nth-of-type(2) [data-baseweb="input"] {
+            border-top:    2px solid #CBD5E1 !important;
+            border-right:  2px solid #CBD5E1 !important;
+            border-bottom: 2px solid #CBD5E1 !important;
+            border-left:   2px solid #CBD5E1 !important;
             border-radius: 10px !important;
-            padding: 0.65rem 0.8rem !important;
-            font-size: 0.9rem !important;
+            background: #FFFFFF !important;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06) !important;
+        }
+
+        /* Hover */
+        [data-testid="column"]:nth-of-type(2) [data-baseweb="input"]:hover {
+            border-top:    2px solid #94A3B8 !important;
+            border-right:  2px solid #94A3B8 !important;
+            border-bottom: 2px solid #94A3B8 !important;
+            border-left:   2px solid #94A3B8 !important;
+        }
+
+        /* Focus */
+        [data-testid="column"]:nth-of-type(2) [data-testid="stTextInput"]:focus-within [data-baseweb="input"] {
+            border-top:    2px solid #3B63FB !important;
+            border-right:  2px solid #3B63FB !important;
+            border-bottom: 2px solid #3B63FB !important;
+            border-left:   2px solid #3B63FB !important;
+            box-shadow: 0 0 0 3px rgba(59,99,251,0.15) !important;
+        }
+
+        /* Container interno e input — limpar todas as bordas */
+        [data-testid="column"]:nth-of-type(2) [data-baseweb="base-input"],
+        [data-testid="column"]:nth-of-type(2) input {
+            background:    transparent !important;
+            border-top:    none !important;
+            border-right:  none !important;
+            border-bottom: none !important;
+            border-left:   none !important;
+            box-shadow:    none !important;
+            outline:       none !important;
+            color:         #1B2139 !important;
+            font-size:     0.9rem !important;
         }
         [data-testid="column"]:nth-of-type(2) input:focus {
-            border-color: #3B63FB !important;
-            box-shadow: 0 0 0 3px rgba(59,99,251,0.15) !important;
+            border-top:    none !important;
+            border-right:  none !important;
+            border-bottom: none !important;
+            border-left:   none !important;
+            box-shadow:    none !important;
+            outline:       none !important;
         }
         [data-testid="column"]:nth-of-type(2) input::placeholder {
             color: #94A3B8 !important;
         }
-
-        /* Password input — room for the eye icon */
         [data-testid="column"]:nth-of-type(2) input[type="password"] {
             padding-right: 3rem !important;
         }
 
-        /* Submit button */
+        /* Botão */
         [data-testid="column"]:nth-of-type(2) .stButton button {
             background: linear-gradient(135deg, #3B63FB, #2246D4) !important;
             color: white !important;
@@ -96,10 +131,10 @@ def login_page():
         }
         [data-testid="column"]:nth-of-type(2) .stButton button:hover {
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(59,99,251,0.3);
+            box-shadow: 0 4px 12px rgba(59,99,251,0.3) !important;
         }
 
-        /* Error messages */
+        /* Erros */
         [data-testid="column"]:nth-of-type(2) .stAlert {
             background: #FEF2F2 !important;
             border: 1px solid #FECACA !important;
@@ -110,10 +145,31 @@ def login_page():
     </style>
     """, unsafe_allow_html=True)
 
+    # Logo em base64 para ficar dentro do card HTML
+    logo_path = os.path.join(os.path.dirname(__file__), "assets", "logo.png")
+    try:
+        logo_b64 = _img_to_b64(logo_path)
+        logo_html = (
+            f'<img src="data:image/png;base64,{logo_b64}" '
+            f'style="height:72px;width:auto;object-fit:contain;'
+            f'display:block;margin:0 auto 0.4rem;"/>'
+        )
+    except FileNotFoundError:
+        logo_html = (
+            '<div style="display:inline-flex;align-items:center;justify-content:center;'
+            'width:64px;height:64px;border-radius:16px;margin:0 auto 0.5rem;'
+            'background:linear-gradient(135deg,#3B63FB,#22D3EE);">'
+            '<span style="color:white;font-size:1.8rem;font-weight:800;">E</span></div>'
+        )
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        st.markdown('<div class="login-logo">📊 ESTG</div>', unsafe_allow_html=True)
-        st.markdown('<div class="login-subtitle">Gestão de Ocupação de Espaços</div>', unsafe_allow_html=True)
+        st.markdown(f"""
+        <div style="text-align:center;margin-bottom:1rem;">
+            {logo_html}
+            <div class="login-subtitle">Gestão de Ocupação de Espaços</div>
+        </div>
+        """, unsafe_allow_html=True)
 
         with st.form("login_form"):
             username = st.text_input("Utilizador", placeholder="admin")

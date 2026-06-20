@@ -34,19 +34,26 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
 
     elif vista == "Semana":
         df["week_start"] = df["DataCompleta"].dt.to_period("W").apply(lambda p: p.start_time)
-        week_starts = sorted(df["week_start"].dt.date.unique())
+        # Mapeia cada week_start para a semana letiva (Numero_Semana_Escolar) correspondente
+        week_sl_map = (
+            df.groupby(df["week_start"].dt.date)["Numero_Semana_Escolar"]
+            .min()
+            .to_dict()
+        )
+        week_starts = sorted(week_sl_map.keys())
         with col_nav1:
             sel_week = st.selectbox(
                 "Semana de",
                 options=week_starts,
-                format_func=lambda d: f"Semana {pd.Timestamp(d).isocalendar()[1]} — {pd.Timestamp(d).strftime('%d/%m/%Y')}",
+                format_func=lambda d: f"Semana {week_sl_map.get(d, '?')} — {pd.Timestamp(d).strftime('%d/%m/%Y')}",
                 key="cal_week_sel"
             )
-        week_ts = pd.Timestamp(sel_week)
+        week_ts  = pd.Timestamp(sel_week)
         week_end = week_ts + pd.Timedelta(days=6)
         week_dates = [week_ts + pd.Timedelta(days=i) for i in range(7)
                       if (week_ts + pd.Timedelta(days=i)).date() <= max_date]
-        title = f"📅 Semana de {week_ts.strftime('%d/%m')} a {(week_ts + pd.Timedelta(days=6)).strftime('%d/%m/%Y')}"
+        sl_num = week_sl_map.get(sel_week, "?")
+        title  = f"📅 Semana Letiva {sl_num} — {week_ts.strftime('%d/%m')} a {(week_ts + pd.Timedelta(days=6)).strftime('%d/%m/%Y')}"
         fig = chart_calendar_week(df, week_dates, title=title)
         st.plotly_chart(fig, use_container_width=True, key="chart_cal_week")
         return df[(df["DataCompleta"].dt.date >= sel_week) &

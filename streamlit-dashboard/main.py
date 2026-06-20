@@ -147,7 +147,9 @@ def _build_active_string(vals: dict) -> str:
     parts = []
     if vals.get("ano_letivo"):         parts.append(f"📅 {vals['ano_letivo']}")
     if vals.get("semestre"):           parts.append(f"Sem {vals['semestre']}")
-    if vals.get("semana"):             parts.append(f"S{vals['semana']}")
+    # semana agora é semana letiva — mostra com prefixo "SL" para distinguir
+    if vals.get("semana") and vals["semana"] != Sentinel.NO_FILTER_F:
+        parts.append(f"SL {vals['semana']}")
     if vals.get("dias"):               parts.append(f"Dias: {', '.join(vals['dias'][:2])}{'…' if len(vals['dias'])>2 else ''}")
     if vals.get("escola"):             parts.append(f"🏛 {vals['escola']}")
     if vals.get("departamento_label"): parts.append(f"🏢 {vals['departamento_label']}")
@@ -197,13 +199,22 @@ def _render_filters(profile: str) -> dict:
         elif wname == "semana":
             ano = vals.get("ano_letivo", Sentinel.NO_FILTER)
             sem = vals.get("semestre",   Sentinel.NO_FILTER)
-            opts = [Sentinel.NO_FILTER_F] + [
-                str(s) for s in get_semanas(
-                    ano_letivo=ano if ano != Sentinel.NO_FILTER else None,
-                    semestre=sem   if sem != Sentinel.NO_FILTER else None,
-                )
-            ]
-            vals["semana"] = st.selectbox("Semana", opts, key=SessionKeys.SEMANA)
+            semanas_disponiveis = get_semanas(
+                ano_letivo=ano if ano != Sentinel.NO_FILTER else None,
+                semestre=sem   if sem != Sentinel.NO_FILTER else None,
+            )
+            # Formata como "Semana 1", "Semana 2", etc. para clareza
+            opts_raw  = [Sentinel.NO_FILTER_F] + semanas_disponiveis
+            opts_disp = [Sentinel.NO_FILTER_F] + [f"Semana {s}" for s in semanas_disponiveis]
+            sel_disp  = st.selectbox(
+                "Semana Letiva", opts_disp, key=SessionKeys.SEMANA
+            )
+            # Guarda o valor numérico para usar nos filtros
+            if sel_disp == Sentinel.NO_FILTER_F:
+                vals["semana"] = Sentinel.NO_FILTER_F
+            else:
+                idx = opts_disp.index(sel_disp)
+                vals["semana"] = opts_raw[idx]   # int
         elif wname == "dias":
             vals["dias"] = st.multiselect(
                 "Dia da Semana", get_dias_semana(), default=[], key=SessionKeys.DIAS
@@ -284,7 +295,8 @@ def _render_filters(profile: str) -> dict:
 
 
 def _extract_filters(vals: dict) -> Filters:
-    NF = Sentinel.NO_FILTER
+    NF  = Sentinel.NO_FILTER
+    NFF = Sentinel.NO_FILTER_F
 
     def _v(key: str):
         val = vals.get(key)
@@ -302,6 +314,15 @@ def _extract_filters(vals: dict) -> Filters:
     if _v("curso"):             f["curso"]            = _v("curso")
     if _v("uc"):                f["uc"]               = _v("uc")
     if _v("epoca"):             f["epoca"]            = _v("epoca")
+
+    # semana_escolar: só passa se for um inteiro válido (não o sentinel de string)
+    semana_raw = vals.get("semana")
+    if semana_raw and semana_raw != NFF and semana_raw != NF:
+        try:
+            f["semana_escolar"] = int(semana_raw)
+        except (ValueError, TypeError):
+            pass
+
     f["hide_online"]     = bool(vals.get("hide_online",     False))
     f["hide_concurrent"] = bool(vals.get("hide_concurrent", False))
     f["hide_ghost"]      = bool(vals.get("hide_ghost",      False))

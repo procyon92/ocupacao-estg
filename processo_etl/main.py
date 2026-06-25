@@ -8,16 +8,25 @@ Não contém lógica de transformação ou negócio.
 import logging
 import sys
 from dotenv import load_dotenv
+from datetime import datetime
 
 load_dotenv()
 
 
 def setup_logger():
     """Configuração do sistema de logging para auditoria do processo."""
+    log_format = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    date_format = '%Y-%m-%d %H:%M:%S'
+    log_filename = datetime.now().strftime("dumpETL_%Y%m%d_%H%M%S.log")
+
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S'
+        format=log_format,
+        datefmt=date_format,
+        handlers=[
+            logging.StreamHandler(),                                                # consola
+            logging.FileHandler(log_filename, mode="w", encoding="utf-8"),         # ficheiro log
+        ]
     )
     return logging.getLogger("ETL_Orchestrator")
 

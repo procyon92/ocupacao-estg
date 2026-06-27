@@ -519,39 +519,42 @@ def get_free_rooms_by_interval(
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_etl_quality_metrics() -> dict[str, int]:
-    # Conta registos totais vs registos com valores omissos nas dimensões principais
+    # Conta totais e erros numa única query — evita dois round-trips à BD
     conn = get_connection()
     try:
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM Facto_Ocupacao")
-        total: int = cursor.fetchone()[0]
-
-        cursor.execute(
-            """
-            SELECT COUNT(*) FROM Facto_Ocupacao f
-            LEFT JOIN Dim_Espaco e              ON f.SK_Espaco              = e.SK_Espaco
-            LEFT JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular  = uc.SK_Unidade_Curricular
-            LEFT JOIN Dim_Curso c               ON f.SK_Curso               = c.SK_Curso
-            LEFT JOIN Dim_Responsavel r         ON f.SK_Responsavel         = r.SK_Responsavel
-            WHERE e.Edificio = %s
-               OR e.Nome_Espaco = %s
-               OR uc.Designacao_UC IN (%s, %s)
-               OR uc.Ciclo_Estudo = %s
-               OR c.Nome_Curso = %s
-               OR c.Codigo_Curso = %s
-               OR r.Docente_Responsavel IN (%s, %s)
-            """,
-            [
-                Omisso.ND,
-                Omisso.ND,
-                Omisso.ND, Omisso.SEM_UNIDADE,
-                Omisso.ND,
-                Omisso.ND,
-                Omisso.ND,
-                Omisso.ND, Omisso.INDEFINIDO,
-            ],
-        )
-        errors: int = cursor.fetchone()[0]
+        sql = """
+            SELECT
+                COUNT(*) AS total,
+                SUM(CASE
+                    WHEN e.Edificio = %s
+                      OR e.Nome_Espaco = %s
+                      OR uc.Designacao_UC IN (%s, %s)
+                      OR uc.Ciclo_Estudo = %s
+                      OR c.Nome_Curso = %s
+                      OR c.Codigo_Curso = %s
+                      OR r.Docente_Responsavel IN (%s, %s)
+                    THEN 1 ELSE 0
+                END) AS errors
+            FROM Facto_Ocupacao f
+            LEFT JOIN Dim_Espaco e              ON f.SK_Espaco             = e.SK_Espaco
+            LEFT JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular
+            LEFT JOIN Dim_Curso c               ON f.SK_Curso              = c.SK_Curso
+            LEFT JOIN Dim_Responsavel r         ON f.SK_Responsavel        = r.SK_Responsavel
+        """
+        params = [
+            Omisso.ND,
+            Omisso.ND,
+            Omisso.ND, Omisso.SEM_UNIDADE,
+            Omisso.ND,
+            Omisso.ND,
+            Omisso.ND,
+            Omisso.ND, Omisso.INDEFINIDO,
+        ]
+        df = _safe_read(sql, conn, params)
+        if df.empty:
+            return {"total": 0, "valid": 0, "errors": 0}
+        total  = int(df.iloc[0]["total"])
+        errors = int(df.iloc[0]["errors"] or 0)
         return {"total": total, "valid": total - errors, "errors": errors}
     except pymysql.Error as exc:
         logger.exception("ETL metrics failed: %s", exc)
@@ -559,7 +562,6 @@ def get_etl_quality_metrics() -> dict[str, int]:
         return {"total": 0, "valid": 0, "errors": 0}
     finally:
         conn.close()
-
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_unmapped_records_count() -> dict[str, int]:

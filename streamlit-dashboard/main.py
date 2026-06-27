@@ -274,10 +274,10 @@ def _render_filters(profile: str) -> dict:
             st.markdown('<div class="sidebar-group-divider"></div>', unsafe_allow_html=True)
             vals["hide_online"] = st.checkbox("Excluir Online", value=False, key=SessionKeys.HIDE_ONLINE)
         elif wname == "hide_ghost":
-            vals["hide_ghost"] = st.checkbox("Ocultar Ghost", value=False, key=SessionKeys.HIDE_GHOST)
+            vals["hide_ghost"] = st.checkbox("Ocultar Sessões Vazias", value=False, key=SessionKeys.HIDE_GHOST)
         elif wname == "hide_concurrent":
             vals["hide_concurrent"] = st.checkbox(
-                "Deduplicar Concurrentes", value=False, key=SessionKeys.HIDE_CONCURRENT
+                "Ocultar repetidos", value=False, key=SessionKeys.HIDE_CONCURRENT
             )
 
     return vals

@@ -8,9 +8,9 @@ from transforms import compute_general_kpis, build_heatmap_data
 from components import render_kpi, render_spacer, render_section_header
 from utils import fmt_duration
 from plots import (
-    chart_ocupacao_tempo, chart_ocupacao_edificio, chart_heatmap_ocupacao,
-    chart_top_espacos, chart_bottom_espacos, chart_tipo_atividade,
-    chart_categoria_espaco, chart_period_of_day,
+    chart_ocupacao_tempo, chart_ocupacao_semana, chart_ocupacao_edificio,
+    chart_heatmap_ocupacao, chart_top_espacos, chart_bottom_espacos,
+    chart_tipo_atividade, chart_categoria_espaco, chart_period_of_day,
 )
 from config import PLOTLY_CONFIG
 from view.tooltips import TAXA_UTILIZACAO, TEMPO_MEDIO, GHOST
@@ -75,17 +75,25 @@ class GeralProfile(BaseProfile):
 
         render_spacer()
 
-        # Ocupação ao longo do tempo
+        # Ocupação ao longo do tempo — vista semanal se semana específica selecionada
         render_section_header("Ocupação ao Longo do Tempo")
-        gran = st.radio(
-            "Granularidade",
-            ["Diário", "Semanal", "Mensal"],
-            horizontal=True,
-            label_visibility="collapsed",
-            key="gran_tempo",
-        )
-        st.plotly_chart(chart_ocupacao_tempo(df, gran), use_container_width=True, key="chart_trend", config= PLOTLY_CONFIG)
-
+        if filters.get("semana_escolar"):
+            st.plotly_chart(
+                chart_ocupacao_semana(df),
+                use_container_width=True, key="chart_trend", config=PLOTLY_CONFIG
+            )
+        else:
+            gran = st.radio(
+                "Granularidade",
+                ["Diário", "Semanal", "Mensal"],
+                horizontal=True,
+                label_visibility="collapsed",
+                key="gran_tempo",
+            )
+            st.plotly_chart(
+                chart_ocupacao_tempo(df, gran),
+                use_container_width=True, key="chart_trend", config=PLOTLY_CONFIG
+            )
         render_spacer()
 
         # Mapa de calor de ocupação

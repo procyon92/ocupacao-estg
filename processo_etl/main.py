@@ -6,26 +6,26 @@ from datetime import datetime
 load_dotenv()
 
 
-def setup_logger():
+def configurar_logger():
     # Configura logging para consola e ficheiro — o ficheiro inclui timestamp no nome
-    log_format   = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
-    date_format  = '%Y-%m-%d %H:%M:%S'
-    log_filename = datetime.now().strftime("dumpETL_%Y%m%d_%H%M%S.log")
+    formato      = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    formato_data = '%Y-%m-%d %H:%M:%S'
+    nome_log     = datetime.now().strftime("dumpETL_%Y%m%d_%H%M%S.log")
 
     logging.basicConfig(
         level=logging.INFO,
-        format=log_format,
-        datefmt=date_format,
+        format=formato,
+        datefmt=formato_data,
         handlers=[
-            logging.StreamHandler(),                                          # consola
-            logging.FileHandler(log_filename, mode="w", encoding="utf-8"),    # ficheiro
+            logging.StreamHandler(),
+            logging.FileHandler(nome_log, mode="w", encoding="utf-8"),
         ]
     )
     return logging.getLogger("ETL_Orchestrator")
 
 
 def main():
-    logger = setup_logger()
+    logger = configurar_logger()
 
     logger.info("=" * 70)
     logger.info("  ETL PIPELINE v4.0 — Data Warehouse Ocupação ESTG")
@@ -43,16 +43,16 @@ def main():
     df_cursos       = extractor.extract_csv("curso_ucs(in).csv",      sep=";",  encoding="latin-1")
 
     # Extrai os turnos do dump SQL — as colunas esperadas têm de corresponder exatamente ao schema
-    target_table_name = "turnos"
-    expected_cols_stg = [
+    nome_tabela_alvo = "turnos"
+    colunas_esperadas_stg = [
         "id", "desig_edf", "espaco", "datainicio", "datafim",
         "unidade_respon", "tipo", "cod_disc", "nome_disci",
         "ciclo", "descricao", "estado", "pessoa_resp"
     ]
     df_stg = extractor.extract_sql_dump(
         filename="script_espacos_salas_turnos.sql",
-        table_name=target_table_name,
-        expected_columns=expected_cols_stg
+        table_name=nome_tabela_alvo,
+        expected_columns=colunas_esperadas_stg
     )
 
     if df_agendamentos is None or df_stg is None:
@@ -72,17 +72,17 @@ def main():
     transformer = DataTransformer()
 
     # Dimensão Data gerada de forma autónoma — não depende dos ficheiros de origem
-    df_dim_data = transformer.build_date_dimension(start_date='2018-01-01', end_date='2035-12-31')
+    df_dim_data = transformer.construir_dimensao_data(start_date='2018-01-01', end_date='2035-12-31')
 
     # Pipeline principal: limpeza + enriquecimento + alinhamento de schema
-    df_transformed = transformer.apply_pipeline(
+    df_transformado = transformer.apply_pipeline(
         df_main=df_agendamentos,
         df_cursos=df_cursos,
         df_presencas=df_presencas,
         df_stg=df_stg
     )
 
-    if df_transformed is None or df_transformed.empty:
+    if df_transformado is None or df_transformado.empty:
         logger.critical("FALHA CRÍTICA: Transformação resultou em DataFrame vazio.")
         sys.exit(1)
 
@@ -98,13 +98,13 @@ def main():
 
     # Step 2 — Dim_Hora e Dim_Data têm PK fixa (não AUTO_INCREMENT)
     logger.info("[STEP 2] Carregando Dim_Hora e Dim_Data...")
-    df_dim_hora = transformer.build_hour_dimension()
+    df_dim_hora = transformer.construir_dimensao_hora()
     loader.load_fixed_pk_dimension(df_dim_hora, "Dim_Hora", "SK_Hora")
     loader.load_fixed_pk_dimension(df_dim_data, "Dim_Data", "SK_Data")
 
     # Step 3 — Dimensões dinâmicas: SCD2 para as que têm histórico, SCD1 para as restantes
     logger.info("[STEP 3] Sincronizando Dimensões Dinâmicas...")
-    dimensions = [
+    dimensoes = [
         ("Dim_Espaco",             ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online'], 'SK_Espaco'),
         ("Dim_Unidade_Curricular", ['Codigo_UC', 'Designacao_UC', 'Ciclo_Estudo'],                                    'SK_Unidade_Curricular'),
         ("Dim_Curso",              ['Codigo_Curso', 'Nome_Curso'],                                                     'SK_Curso'),
@@ -115,19 +115,19 @@ def main():
         ("Dim_Epoca",              ['Descricao_Epoca'],                                                                'SK_Epoca'),
     ]
 
-    scd2_tables = ["Dim_Espaco", "Dim_Unidade_Curricular", "Dim_Curso"]
+    tabelas_scd2 = ["Dim_Espaco", "Dim_Unidade_Curricular", "Dim_Curso"]
 
-    for table, keys, sk in dimensions:
-        if all(k in df_transformed.columns for k in keys):
-            logger.info(f"  -> Processando {table}...")
-            if table in scd2_tables:
-                df_transformed = loader.load_dimension_scd2(df_transformed, table, keys, sk)
+    for tabela, chaves, sk in dimensoes:
+        if all(k in df_transformado.columns for k in chaves):
+            logger.info(f"  -> Processando {tabela}...")
+            if tabela in tabelas_scd2:
+                df_transformado = loader.load_dimension_scd2(df_transformado, tabela, chaves, sk)
             else:
-                df_transformed = loader.load_dimension_scd1(df_transformed, table, keys, sk)
+                df_transformado = loader.load_dimension_scd1(df_transformado, tabela, chaves, sk)
 
     # Step 4 — Prepara e carrega a tabela de factos
     logger.info("[STEP 4] Preparando e Carregando Facto_Ocupacao...")
-    df_payload = loader.prepare_fact_payload(df_transformed)
+    df_payload = loader.prepare_fact_payload(df_transformado)
     loader.print_quality_metrics(df_payload)
     loader.load_fact(df_payload)
 

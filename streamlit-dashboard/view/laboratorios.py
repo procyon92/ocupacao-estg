@@ -5,7 +5,7 @@ from models import Filters
 from view.base import BaseProfile
 from view._helpers import load_and_prepare
 from queries import get_filtered_rooms_count, get_departamentos
-from transforms import build_heatmap_data
+from transforms import build_heatmap_data, apply_post_filters
 from components import render_kpi, render_spacer, render_section_header
 from utils import fmt_duration_long
 from config import LAB_CATEGORY, PLOTLY_CONFIG, Omisso
@@ -44,6 +44,12 @@ class LaboratoriosProfile(BaseProfile):
             lab_filters.pop("departamento", None)
 
         df = load_and_prepare(lab_filters)
+        df = apply_post_filters(
+            df,
+            hide_online=filters.get("hide_online", False),
+            hide_concurrent=filters.get("hide_concurrent", False),
+            hide_ghost=filters.get("hide_ghost", False),
+        )
         if df.empty:
             return self._empty("Sem dados de laboratório para os filtros selecionados.")
 

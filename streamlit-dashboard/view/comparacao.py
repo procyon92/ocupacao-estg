@@ -4,7 +4,7 @@ import pandas as pd
 from models import Filters
 from view.base import BaseProfile
 from queries import get_space_detail_data, get_espacos
-from transforms import normalize_dataframe
+from transforms import normalize_dataframe, apply_post_filters
 from components import render_spacer, render_section_header
 from utils import clamp, pct
 from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG
@@ -32,12 +32,17 @@ class ComparacaoProfile(BaseProfile):
         rooms_data: dict[str, pd.DataFrame] = {}
         with st.spinner("A carregar dados das salas..."):
             for room in selected_rooms:
-                rd = normalize_dataframe(
-                    get_space_detail_data(
-                        space_name=room,
-                        ano_escolar=filters.get("ano_letivo"),
-                        semestre=filters.get("semestre"),
-                    )
+                rd = apply_post_filters(
+                    normalize_dataframe(
+                        get_space_detail_data(
+                            space_name=room,
+                            ano_escolar=filters.get("ano_letivo"),
+                            semestre=filters.get("semestre"),
+                        )
+                    ),
+                    hide_online=filters.get("hide_online", False),
+                    hide_concurrent=filters.get("hide_concurrent", False),
+                    hide_ghost=filters.get("hide_ghost", False),
                 )
                 if not rd.empty:
                     rooms_data[room] = rd

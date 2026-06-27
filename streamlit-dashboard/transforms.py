@@ -1,9 +1,3 @@
-"""
-transforms.py — Post-query data cleaning and KPI computation.
-
-All functions are pure (DataFrame in → DataFrame / dict out).
-No DB access, no Streamlit calls, no side effects.
-"""
 from __future__ import annotations
 import pandas as pd
 from config import Omisso, DAILY_CAPACITY_MINUTES
@@ -16,7 +10,7 @@ def apply_post_filters(
     hide_concurrent: bool = False,
     hide_ghost: bool = False,
 ) -> pd.DataFrame:
-    """Apply optional row-level exclusions after the main query."""
+    # Aplica exclusões opcionais após a query principal — não toca na BD
     if df.empty:
         return df
     if hide_online and "is_online" in df.columns:
@@ -29,17 +23,13 @@ def apply_post_filters(
 
 
 def normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Apply consistent column transformations to any fact DataFrame.
-    - Parse DataCompleta to datetime
-    - Normalize blank teacher names
-
-    Always works on a copy so the caller's DataFrame is never mutated.
-    """
+    # Normaliza colunas comuns a todos os DataFrames de factos:
+    # converte DataCompleta para datetime e limpa nomes de docentes em branco.
+    # Trabalha sempre numa cópia — o DataFrame original nunca é mutado.
     if df.empty:
         return df
 
-    df = df.copy()  # single copy — safe to mutate from here on
+    df = df.copy()
 
     if "DataCompleta" in df.columns:
         df["DataCompleta"] = pd.to_datetime(df["DataCompleta"])
@@ -51,20 +41,20 @@ def normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def compute_general_kpis(df: pd.DataFrame) -> dict:
-    """
-    Compute the standard KPI set used by profiles A and E.
-    Assumes df has already been normalized (DataCompleta is datetime).
-    """
+    # Calcula o conjunto padrão de KPIs usado pelos perfis gerais.
+    # Assume que o DataFrame já foi normalizado (DataCompleta é datetime).
     total_ocup       = len(df)
     espacos_ocupados = df["Nome_Espaco"].nunique()
     total_min        = df["Duracao_Minutos"].sum()
     dias             = df["DataCompleta"].nunique()
 
+    # Taxa de ocupação = minutos ocupados / capacidade total disponível
     cap_disponivel = espacos_ocupados * dias * DAILY_CAPACITY_MINUTES
     taxa_ocup      = clamp(pct(total_min, cap_disponivel)) if cap_disponivel > 0 else 0
 
     avg_min    = df["Duracao_Minutos"].mean() if total_ocup > 0 else 0
     total_pres = int(df["Numero_Presencas"].sum())
+    # Ghost session = aula registada com 0 presenças
     ghost_pct  = round(pct((df["Numero_Presencas"] == 0).sum(), total_ocup), 1) if total_ocup else 0
 
     return {
@@ -80,6 +70,7 @@ def compute_general_kpis(df: pd.DataFrame) -> dict:
 
 
 def build_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
+    # Agrega o número de ocupações por (dia da semana, hora de início) — base para o mapa de calor
     return (
         df.groupby(["DiaSemana", "Hora_Inicio"])
         .size()
@@ -88,7 +79,7 @@ def build_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def combine_anomaly_flags(row: pd.Series) -> str:
-    """Build a human-readable anomaly string from flag columns."""
+    # Constrói uma string legível com as anomalias detetadas para uma linha de factos
     flags = []
     if row.get("Ghost_Flag"):  flags.append("👻 Ghost")
     if row.get("UC_Flag"):     flags.append("📚 UC N/D")

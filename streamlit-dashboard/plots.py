@@ -53,11 +53,11 @@ def chart_ocupacao_tempo(df: pd.DataFrame, granularity: str = "Mensal") -> go.Fi
         grouped = df.groupby("DataCompleta").size().reset_index(name="Total").sort_values("DataCompleta")
         x_col = "DataCompleta"
     elif granularity == "Semanal":
-        df["Semana"] = df["DataCompleta"].dt.to_period("W").apply(lambda r: r.start_time)
+        df["Semana"] = df["DataCompleta"].dt.to_period("W").apply(lambda r: r.start_time.date())
         grouped = df.groupby("Semana").size().reset_index(name="Total").sort_values("Semana")
         x_col = "Semana"
     else:
-        df["Mes_Periodo"] = df["DataCompleta"].dt.to_period("M").apply(lambda r: r.start_time)
+        df["Mes_Periodo"] = df["DataCompleta"].dt.to_period("M").apply(lambda r: r.start_time.date())
         grouped = df.groupby("Mes_Periodo").size().reset_index(name="Total").sort_values("Mes_Periodo")
         x_col = "Mes_Periodo"
 
@@ -67,11 +67,48 @@ def chart_ocupacao_tempo(df: pd.DataFrame, granularity: str = "Mensal") -> go.Fi
         fill="tozeroy", fillcolor="rgba(59, 99, 251, 0.08)",
         line=dict(color=COLORS["primary"], width=2.5, shape="spline"),
         mode="lines", name="Ocupações",
-        hovertemplate="<b>%{x|%d/%m/%Y}</b><br>Total: %{y:,.0f}<extra></extra>",
+        hovertemplate="<b>%{x}</b><br>Total: %{y:,.0f}<extra></extra>",
     ))
     fig = _base_layout(fig, "Ocupação ao longo do tempo", height=380)
     fig.update_xaxes(title_text="", tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155"))
+    return fig
+
+def chart_ocupacao_semana(df: pd.DataFrame) -> go.Figure:
+    # Vista para semana específica — barras por dia da semana (Seg a Sáb)
+    if df.empty:
+        fig = go.Figure()
+        fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
+        return _base_layout(fig, "Ocupação da Semana")
+
+    day_order = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
+    day_labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+
+    counts = (
+        df[df["DiaSemana"].isin(day_order)]
+        .groupby("DiaSemana")
+        .size()
+        .reindex(day_order, fill_value=0)
+        .reset_index(name="Total")
+    )
+    counts["Label"] = day_labels[:len(counts)]
+
+    fig = go.Figure(go.Bar(
+        x=counts["DiaSemana"].map(dict(zip(day_order, day_labels))),
+        y=counts["Total"],
+        marker=dict(
+            color=counts["Total"],
+            colorscale=[[0, "#93C5FD"], [1, "#3B63FB"]],
+            cornerradius=6,
+        ),
+        text=counts["Total"].apply(lambda v: f"{v:,.0f}"),
+        textposition="outside",
+        textfont=dict(size=12, color="#1B2139"),
+        hovertemplate="<b>%{x}</b><br>Sessões: %{y:,.0f}<extra></extra>",
+    ))
+    fig = _base_layout(fig, "Ocupação por Dia da Semana", height=380)
+    fig.update_xaxes(title_text="", tickfont=dict(color="#334155"))
+    fig.update_yaxes(title_text="Nº Sessões", tickfont=dict(color="#334155"))
     return fig
 
 
@@ -455,11 +492,21 @@ def chart_comparison_trend(rooms_dict: dict) -> go.Figure:
             hovertemplate=f"<b>{room_name}</b><br>%{{x}}<br>Sessões: %{{y}}<extra></extra>",
         ))
 
-    fig = _base_layout(fig, "Comparação de Ocupação — Tendência Diária", height=400)
+    fig = _base_layout(fig, "Comparação de Ocupação — Tendência Diária", height=450)
+    fig.update_layout(
+        margin=dict(l=50, r=30, t=60, b=120),
+        legend=dict(
+            orientation="h",
+            yanchor="top",
+            y=-0.25,
+            xanchor="center",
+            x=0.5,
+            font=dict(size=11),
+        ),
+    )
     fig.update_xaxes(title_text="", tickangle=-45, tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="Nº Sessões", tickfont=dict(color="#334155"))
     return fig
-
 
 def _get_color_map(df: pd.DataFrame) -> dict:
     # Atribui uma cor estável a cada UC — ordem alfabética para ser consistente entre vistas
@@ -566,6 +613,8 @@ def chart_calendar_day(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
 
 
 def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title: str = "") -> go.Figure:
+    if not df.empty and "DataCompleta" in df.columns:
+        df["DataCompleta"] = pd.to_datetime(df["DataCompleta"], errors='coerce')
     # Vista semanal — uma coluna por dia, blocos de aulas sobrepostos na grelha horária
     fig = go.Figure()
     color_map = _get_color_map(df)

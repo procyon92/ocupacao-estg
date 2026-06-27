@@ -23,7 +23,8 @@ def _weekday_order_clause(col: str = "d.DiaSemana") -> str:
 def _safe_read(sql: str, conn, params=None) -> pd.DataFrame:
     # Corre a query e devolve um DataFrame; se der erro, mostra mensagem e devolve DF vazio
     try:
-        return pd.read_sql(sql, conn, params=params or [])
+        p = tuple(params) if params else None
+        return pd.read_sql(sql, conn, params=p)
     except pymysql.Error as exc:
         logger.exception("Query failed: %s", exc)
         st.error(f"Erro de base de dados: {exc}")

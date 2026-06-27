@@ -8,7 +8,7 @@ from queries import get_filtered_rooms_count, get_departamentos
 from transforms import build_heatmap_data
 from components import render_kpi, render_spacer, render_section_header
 from utils import fmt_duration_long
-from config import LAB_CATEGORY, Omisso
+from config import LAB_CATEGORY, PLOTLY_CONFIG, Omisso
 from plots import (
     chart_heatmap_ocupacao, chart_period_of_day,
     chart_tipo_atividade, chart_top_espacos, chart_bottom_espacos,
@@ -72,19 +72,19 @@ class LaboratoriosProfile(BaseProfile):
         col_heat, col_period = st.columns([2, 1])
         with col_heat:
             st.plotly_chart(chart_heatmap_ocupacao(build_heatmap_data(df)),
-                            use_container_width=True, key="lab_chart_heat")
+                            use_container_width=True, key="lab_chart_heat", config= PLOTLY_CONFIG)
         with col_period:
-            st.plotly_chart(chart_period_of_day(df), use_container_width=True, key="lab_chart_period")
+            st.plotly_chart(chart_period_of_day(df), use_container_width=True, key="lab_chart_period", config= PLOTLY_CONFIG)
 
         render_spacer()
         top_n = st.slider("Top / Bottom N Laboratórios", 5, 30, 10, key="lab_top_n")
         col_tipo, col_top, col_bottom = st.columns(3)
         with col_tipo:
-            st.plotly_chart(chart_tipo_atividade(df), use_container_width=True, key="lab_chart_tipo")
+            st.plotly_chart(chart_tipo_atividade(df), use_container_width=True, key="lab_chart_tipo", config= PLOTLY_CONFIG)
         with col_top:
-            st.plotly_chart(chart_top_espacos(df, top_n), use_container_width=True, key="lab_chart_top")
+            st.plotly_chart(chart_top_espacos(df, top_n), use_container_width=True, key="lab_chart_top", config= PLOTLY_CONFIG)
         with col_bottom:
-            st.plotly_chart(chart_bottom_espacos(df, top_n), use_container_width=True, key="lab_chart_bottom")
+            st.plotly_chart(chart_bottom_espacos(df, top_n), use_container_width=True, key="lab_chart_bottom", config= PLOTLY_CONFIG)
 
         render_spacer()
         render_section_header("Gestão de Capacidade — Laboratórios")

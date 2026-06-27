@@ -7,7 +7,7 @@ from queries import get_space_detail_data, get_espacos
 from transforms import normalize_dataframe
 from components import render_spacer, render_section_header
 from utils import clamp, pct
-from config import DAILY_CAPACITY_MINUTES
+from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG
 from plots import chart_top_espacos, chart_comparison_trend
 
 
@@ -71,12 +71,12 @@ class ComparacaoProfile(BaseProfile):
         )
         st.plotly_chart(
             chart_top_espacos(combined, top_n=len(rooms_data)),
-            use_container_width=True, key="chart_compare_bar",
+            use_container_width=True, key="chart_compare_bar", config= PLOTLY_CONFIG
         )
 
         render_spacer()
         render_section_header("Tendência Diária Comparativa")
         st.plotly_chart(
             chart_comparison_trend(rooms_data),
-            use_container_width=True, key="chart_compare_trend",
+            use_container_width=True, key="chart_compare_trend", config= PLOTLY_CONFIG
         )

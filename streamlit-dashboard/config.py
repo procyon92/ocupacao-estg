@@ -55,6 +55,9 @@ WEEKDAY_ORDER = (
     "Quinta-feira", "Sexta-feira", "Sábado",
 )
 
+# Sem domingo
+WEEKDAY_SHORT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
+
 # Versão completa para as vistas de calendário
 WEEKDAY_ORDER_FULL = (
     "Segunda-feira", "Terça-feira", "Quarta-feira",
@@ -62,7 +65,7 @@ WEEKDAY_ORDER_FULL = (
 )
 
 # Abreviações dos dias — índice corresponde a WEEKDAY_ORDER_FULL
-WEEKDAY_SHORT = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
+WEEKDAY_SHORT_FULL = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"]
 
 # Dicionário de tradução dia completo → abreviação
 WEEKDAY_PT = {
@@ -104,4 +107,10 @@ DIMENSION_COVERAGE_COLS: dict = {
     "Responsável":    "Docente_Responsavel",
     "Estado":         "Estado",
     "Turno":          "Designacao_Turno",
+}
+
+# Desativar o scroll e a barra de ferramentas dos gráficos
+PLOTLY_CONFIG = {
+    "scrollZoom":    False,
+    "displayModeBar": False,
 }

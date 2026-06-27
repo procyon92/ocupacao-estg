@@ -12,6 +12,7 @@ from plots import (
     chart_top_espacos, chart_bottom_espacos, chart_tipo_atividade,
     chart_categoria_espaco, chart_period_of_day,
 )
+from config import PLOTLY_CONFIG
 from view.tooltips import TAXA_UTILIZACAO, TEMPO_MEDIO, GHOST
 
 class GeralProfile(BaseProfile):
@@ -44,9 +45,9 @@ class GeralProfile(BaseProfile):
         render_section_header("Distribuição por Edifício e Categoria")
         col_donut1, col_donut2 = st.columns(2)
         with col_donut1:
-            st.plotly_chart(chart_ocupacao_edificio(df), use_container_width=True, key="chart_donut_v2")
+            st.plotly_chart(chart_ocupacao_edificio(df), use_container_width=True, key="chart_donut_v2", config= PLOTLY_CONFIG)
         with col_donut2:
-            st.plotly_chart(chart_categoria_espaco(df), use_container_width=True, key="chart_cat_v2")
+            st.plotly_chart(chart_categoria_espaco(df), use_container_width=True, key="chart_cat_v2", config= PLOTLY_CONFIG)
 
         render_spacer()
 
@@ -54,9 +55,9 @@ class GeralProfile(BaseProfile):
         render_section_header("Análise por Período e Tipo de Atividade")
         col_period, col_atv = st.columns(2)
         with col_period:
-            st.plotly_chart(chart_period_of_day(df), use_container_width=True, key="chart_period")
+            st.plotly_chart(chart_period_of_day(df), use_container_width=True, key="chart_period", config= PLOTLY_CONFIG)
         with col_atv:
-            st.plotly_chart(chart_tipo_atividade(df), use_container_width=True, key="chart_atv_v2")
+            st.plotly_chart(chart_tipo_atividade(df), use_container_width=True, key="chart_atv_v2", config= PLOTLY_CONFIG)
 
         render_spacer()
 
@@ -68,9 +69,9 @@ class GeralProfile(BaseProfile):
 
         col_top, col_bottom = st.columns(2)
         with col_top:
-            st.plotly_chart(chart_top_espacos(df, top_n), use_container_width=True, key="chart_top")
+            st.plotly_chart(chart_top_espacos(df, top_n), use_container_width=True, key="chart_top", config= PLOTLY_CONFIG)
         with col_bottom:
-            st.plotly_chart(chart_bottom_espacos(df, top_n), use_container_width=True, key="chart_bottom")
+            st.plotly_chart(chart_bottom_espacos(df, top_n), use_container_width=True, key="chart_bottom", config= PLOTLY_CONFIG)
 
         render_spacer()
 
@@ -83,7 +84,7 @@ class GeralProfile(BaseProfile):
             label_visibility="collapsed",
             key="gran_tempo",
         )
-        st.plotly_chart(chart_ocupacao_tempo(df, gran), use_container_width=True, key="chart_trend")
+        st.plotly_chart(chart_ocupacao_tempo(df, gran), use_container_width=True, key="chart_trend", config= PLOTLY_CONFIG)
 
         render_spacer()
 
@@ -93,4 +94,5 @@ class GeralProfile(BaseProfile):
             chart_heatmap_ocupacao(build_heatmap_data(df)),
             use_container_width=True,
             key="chart_heat_v2",
+            config= PLOTLY_CONFIG
         )

@@ -6,7 +6,7 @@ from queries import get_space_detail_data, get_espacos
 from transforms import normalize_dataframe
 from components import render_kpi, render_spacer, render_section_header
 from utils import clamp, pct
-from config import DAILY_CAPACITY_MINUTES, Omisso
+from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG, Omisso
 from plots import chart_single_space_heatmap, chart_monthly_calendar
 from calendar_chart import render_timetable_calendar
 from view.tooltips import TAXA_UTILIZACAO, GHOST
@@ -59,7 +59,7 @@ class DetalheEspacoProfile(BaseProfile):
         col_heatmap, col_calendar = st.columns(2)
         with col_heatmap:
             st.plotly_chart(chart_single_space_heatmap(df),
-                            use_container_width=True, key="chart_space_heat")
+                            use_container_width=True, key="chart_space_heat", config= PLOTLY_CONFIG)
         with col_calendar:
             c1, c2 = st.columns(2)
             with c1:
@@ -73,7 +73,7 @@ class DetalheEspacoProfile(BaseProfile):
                     index=0, key="cal_month",
                 )
             st.plotly_chart(chart_monthly_calendar(df, int(cal_year), int(cal_month)),
-                            use_container_width=True, key="chart_month_cal")
+                            use_container_width=True, key="chart_month_cal", config= PLOTLY_CONFIG)
 
         render_spacer()
         render_section_header("Calendário de Horários")
@@ -116,6 +116,6 @@ class DetalheEspacoProfile(BaseProfile):
                 "Atividade": st.column_config.TextColumn("Atividade", width="small"),
                 "Docente":   st.column_config.TextColumn("Docente",   width="medium"),
                 "Presenças": st.column_config.NumberColumn("Presenças", width="small"),
-                "Estado":    st.column_call_config.TextColumn("Estado",    width="small"),
+                "Estado":    st.column_config.TextColumn("Estado", width="small"),
             },
         )

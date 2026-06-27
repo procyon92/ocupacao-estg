@@ -10,6 +10,7 @@ from queries import (
 from transforms import normalize_dataframe, combine_anomaly_flags
 from components import render_kpi, render_spacer, render_section_header, render_dimension_coverage
 from plots import chart_anomalies_trend
+from config import PLOTLY_CONFIG
 
 
 class QualidadeProfile(BaseProfile):
@@ -39,7 +40,7 @@ class QualidadeProfile(BaseProfile):
         render_spacer(1.2)
         render_section_header("Evolução de Anomalias")
         st.plotly_chart(chart_anomalies_trend(ghost_trend),
-                        use_container_width=True, key="chart_ghost_trend")
+                        use_container_width=True, key="chart_ghost_trend", config= PLOTLY_CONFIG)
 
         render_spacer()
         # Carrega os dados para calcular a cobertura das dimensões

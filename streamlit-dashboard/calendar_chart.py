@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 from plots import chart_calendar_day, chart_calendar_week, chart_calendar_month
+from config import PLOTLY_CONFIG
 
 
 def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
@@ -27,7 +28,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
                                           min_value=min_date, max_value=max_date,
                                           key="cal_day_date")
         fig = chart_calendar_day(df, pd.Timestamp(selected_date))
-        st.plotly_chart(fig, use_container_width=True, key="chart_cal_day")
+        st.plotly_chart(fig, use_container_width=True, key="chart_cal_day", config=PLOTLY_CONFIG)
         return df[df["DataCompleta"].dt.date == selected_date].copy()
 
     elif vista == "Semana":
@@ -54,7 +55,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
         sl_num = week_sl_map.get(sel_week, "?")
         title  = f"📅 Semana Letiva {sl_num} — {week_ts.strftime('%d/%m')} a {(week_ts + pd.Timedelta(days=6)).strftime('%d/%m/%Y')}"
         fig = chart_calendar_week(df, week_dates, title=title)
-        st.plotly_chart(fig, use_container_width=True, key="chart_cal_week")
+        st.plotly_chart(fig, use_container_width=True, key="chart_cal_week", config=PLOTLY_CONFIG)
         return df[(df["DataCompleta"].dt.date >= sel_week) &
                   (df["DataCompleta"].dt.date <= week_end.date())].copy()
 
@@ -69,7 +70,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
                 key="cal_month_sel"
             )
         fig = chart_calendar_month(df, sel_month.year, sel_month.month)
-        st.plotly_chart(fig, use_container_width=True, key="chart_cal_month")
+        st.plotly_chart(fig, use_container_width=True, key="chart_cal_month", config=PLOTLY_CONFIG)
         return df[(df["DataCompleta"].dt.year == sel_month.year) &
                   (df["DataCompleta"].dt.month == sel_month.month)].copy()
 

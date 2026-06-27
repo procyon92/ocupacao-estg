@@ -7,6 +7,7 @@ from queries import get_filtered_rooms_count, get_occupancy_by_slot
 from transforms import compute_general_kpis
 from components import render_kpi, render_spacer, render_section_header
 from plots import chart_critical_heatmap
+from config import PLOTLY_CONFIG
 
 
 class AlertasProfile(BaseProfile):
@@ -68,7 +69,7 @@ class AlertasProfile(BaseProfile):
         render_section_header("Mapa de Ocupação Crítica")
         st.plotly_chart(
             chart_critical_heatmap(df_slots, total_rooms, low_threshold, high_threshold),
-            use_container_width=True, key="chart_critical_heat",
+            use_container_width=True, key="chart_critical_heat", config= PLOTLY_CONFIG
         )
 
         render_spacer()

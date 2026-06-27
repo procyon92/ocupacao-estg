@@ -22,6 +22,7 @@ def load_and_prepare(filters: Filters) -> pd.DataFrame:
         curso=filters.get("curso"),
         uc=filters.get("uc"),
         epoca=filters.get("epoca"),
+        semana_escolar=filters.get("semana_escolar"),
         only_labs=filters.get("only_labs", False),
     )
     # 2. normaliza datas e nomes de docentes

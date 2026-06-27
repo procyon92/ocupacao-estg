@@ -86,19 +86,18 @@ class DataLoader:
             if not existing_df.empty:
                 for key in nk_valid:
                     if key in dim_df.columns and key in existing_df.columns:
-                        dim_df[key] = dim_df[key].astype(str)
+                        dim_df[key]      = dim_df[key].astype(str)
                         existing_df[key] = existing_df[key].astype(str)
-                check = pd.merge(dim_df, existing_df[nk_valid], on=nk_valid, how='left', indicator=True)
+                check       = pd.merge(dim_df, existing_df[nk_valid], on=nk_valid, how='left', indicator=True)
                 new_records = check[check['_merge'] == 'left_only'][nk_valid].copy()
             else:
                 new_records = dim_df.copy()
 
             if not new_records.empty:
-                insert_df = new_records[nk_valid].copy()
-                insert_df.to_sql(table_name.lower(), conn, if_exists='append', index=False)
-                self.logger.info(f"[{table_name}] {len(insert_df)} novos registos inseridos (SCD1).")
+                new_records[nk_valid].to_sql(table_name.lower(), conn, if_exists='append', index=False)
+                self.logger.info(f"[{table_name}] {len(new_records)} novos registos inseridos (SCD1).")
 
-        with self.engine.connect() as conn:
+            # Lookup dentro da mesma transação — evita abrir uma segunda ligação
             existing_df = pd.read_sql(text(f"SELECT * FROM {table_name}"), conn)
 
         if sk_name in df.columns:
@@ -108,11 +107,11 @@ class DataLoader:
             merge_cols = [c for c in nk_valid if c in existing_df.columns]
             for key in merge_cols:
                 if key in df.columns:
-                    df[key] = df[key].astype(str)
+                    df[key]          = df[key].astype(str)
                     existing_df[key] = existing_df[key].astype(str)
             # Faz o lookup da SK pelo(s) natural key(s)
             lookup = existing_df[merge_cols + [sk_name]].drop_duplicates(subset=merge_cols, keep='first')
-            df = pd.merge(df, lookup, on=merge_cols, how='left')
+            df     = pd.merge(df, lookup, on=merge_cols, how='left')
             df[sk_name] = df[sk_name].fillna(0).astype(int)
         else:
             df[sk_name] = 0
@@ -129,7 +128,7 @@ class DataLoader:
             return df
 
         dim_cols = [c for c in df.columns if c != sk_name]
-        dim_df = df[dim_cols].drop_duplicates(subset=nk_valid).copy()
+        dim_df   = df[dim_cols].drop_duplicates(subset=nk_valid).copy()
 
         for col in dim_df.columns:
             dim_df[col] = dim_df[col].astype(str).str.strip().replace({'nan': 'N/D', '<NA>': 'N/D', '': 'N/D', 'None': 'N/D'})
@@ -142,23 +141,23 @@ class DataLoader:
 
             if not existing_df.empty:
                 common_cols = [c for c in dim_df.columns if c in existing_df.columns]
-                dim_df = dim_df[common_cols].copy()
-                nk_valid = [k for k in nk_valid if k in dim_df.columns]
+                dim_df      = dim_df[common_cols].copy()
+                nk_valid    = [k for k in nk_valid if k in dim_df.columns]
 
             if not existing_df.empty:
                 for key in nk_valid:
                     if key in dim_df.columns and key in existing_df.columns:
-                        dim_df[key] = dim_df[key].astype(str).str.strip()
+                        dim_df[key]      = dim_df[key].astype(str).str.strip()
                         existing_df[key] = existing_df[key].astype(str).str.strip()
-                merged = pd.merge(dim_df, existing_df, on=nk_valid, how='left', suffixes=('', '_db'), indicator=True)
+                merged      = pd.merge(dim_df, existing_df, on=nk_valid, how='left', suffixes=('', '_db'), indicator=True)
                 new_records = merged[merged['_merge'] == 'left_only'][dim_df.columns].copy()
 
                 # Deteta registos cujos atributos mudaram (excluindo as natural keys)
-                compare_cols = [c for c in dim_df.columns if c not in nk_valid and c in existing_df.columns]
+                compare_cols    = [c for c in dim_df.columns if c not in nk_valid and c in existing_df.columns]
                 changed_records = pd.DataFrame()
 
                 if compare_cols:
-                    both = merged[merged['_merge'] == 'both'].copy()
+                    both         = merged[merged['_merge'] == 'both'].copy()
                     changed_mask = pd.Series([False] * len(both), index=both.index)
                     for col in compare_cols:
                         changed_mask |= (both[col] != both[f"{col}_db"])
@@ -173,7 +172,7 @@ class DataLoader:
                             {"current_date": current_date, "sks": tuple(sks_to_expire)}
                         )
                     changed_inserts = changed_records[dim_df.columns].copy()
-                    new_records = pd.concat([new_records, changed_inserts], ignore_index=True)
+                    new_records     = pd.concat([new_records, changed_inserts], ignore_index=True)
             else:
                 new_records = dim_df.copy()
 
@@ -184,8 +183,11 @@ class DataLoader:
                 new_records.to_sql(table_name.lower(), conn, if_exists='append', index=False)
                 self.logger.info(f"[{table_name}] {len(new_records)} novos/atualizados registos inseridos (SCD2).")
 
-        with self.engine.connect() as conn:
-            lookup_df = pd.read_sql(text(f"SELECT {','.join(nk_valid)}, {sk_name} FROM {table_name} WHERE Is_Active = 1"), conn)
+            # Lookup dentro da mesma transação — evita abrir uma segunda ligação
+            lookup_df = pd.read_sql(
+                text(f"SELECT {','.join(nk_valid)}, {sk_name} FROM {table_name} WHERE Is_Active = 1"),
+                conn
+            )
 
         if sk_name in df.columns:
             df = df.drop(columns=[sk_name])
@@ -193,10 +195,10 @@ class DataLoader:
         merge_cols = [c for c in nk_valid if c in lookup_df.columns]
         for key in merge_cols:
             if key in df.columns:
-                df[key] = df[key].astype(str).str.strip()
+                df[key]        = df[key].astype(str).str.strip()
                 lookup_df[key] = lookup_df[key].astype(str).str.strip()
-        lookup = lookup_df[merge_cols + [sk_name]].drop_duplicates(subset=merge_cols, keep='first')
-        df = pd.merge(df, lookup, on=merge_cols, how='left')
+        lookup      = lookup_df[merge_cols + [sk_name]].drop_duplicates(subset=merge_cols, keep='first')
+        df          = pd.merge(df, lookup, on=merge_cols, how='left')
         df[sk_name] = df[sk_name].fillna(0).astype(int)
 
         return df
@@ -268,6 +270,6 @@ class DataLoader:
         total = len(df)
         for sk in sk_columns:
             filled = (df[sk] > 0).sum()
-            pct = (filled / total * 100) if total > 0 else 0
+            pct    = (filled / total * 100) if total > 0 else 0
             self.logger.info(f"  {sk:35s}: {filled:>7,}/{total:>7,} ({pct:6.2f}%)")
         self.logger.info("=" * 60)

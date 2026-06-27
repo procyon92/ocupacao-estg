@@ -10,27 +10,24 @@ load_dotenv()
 
 
 class DataLoader:
-    """
-    Camada de Carregamento (Load) do Pipeline ETL.
-    Responsável por materializar o Modelo Dimensional na Base de Dados MySQL.
-    Gere Surrogate Keys, população de Dimensões (SCD1 e SCD2) e inserção da Facto.
-    """
+    # Camada de Load do ETL — materializa o modelo dimensional na BD MySQL.
+    # Gere Surrogate Keys, dimensões (SCD1 e SCD2) e inserção da tabela de factos.
 
     def __init__(self, host=None, user=None, password=None, db_name=None, port=None):
-        self.host = host or os.getenv('DB_HOST', 'localhost')
-        self.user = user or os.getenv('DB_USER', 'root')
+        # Lê as credenciais do .env se não forem passadas diretamente
+        self.host     = host     or os.getenv('DB_HOST', 'localhost')
+        self.user     = user     or os.getenv('DB_USER', 'root')
         self.password = password or os.getenv('DB_PASSWORD', '')
-        self.db_name = db_name or os.getenv('DB_NAME', 'dw_ocupacao')
-        self.port = port or os.getenv('DB_PORT', '3306')
+        self.db_name  = db_name  or os.getenv('DB_NAME', 'dw_ocupacao')
+        self.port     = port     or os.getenv('DB_PORT', '3306')
         self.connection_string = f"mysql+pymysql://{self.user}:{self.password}@{self.host}:{self.port}/{self.db_name}"
         self.engine = create_engine(self.connection_string, future=True)
         self.logger = logging.getLogger(__name__)
 
-    # =========================================================================
-    # DUMMY RECORDS (SK=0) — Gestão de Dados Ausentes
-    # =========================================================================
+    # Dummy Records (SK=0)
+
     def ensure_dummy_dimension_records(self):
-        """Garante a existência do registo SK=0 em todas as dimensões com base no novo DDL."""
+        # Garante que existe o registo SK=0 em todas as dimensões — usado quando um facto não tem dimensão conhecida
         self.logger.info("A inserir/validar Dummies (SK=0)...")
         queries = [
             "INSERT IGNORE INTO Dim_Data (SK_Data, DataCompleta, Ano, Ano_Escolar, Mes, Numero_Semana, Dia, DiaSemana, Semestre, Tipo_Dia, Numero_Semana_Escolar) VALUES (0, '1900-01-01', 1900, 'N/D', 1, 0, 1, 'N/D', 0, 'N/D', 0)",
@@ -44,18 +41,17 @@ class DataLoader:
             "INSERT IGNORE INTO Dim_Estado_Agendamento (SK_Estado_Agendamento, Estado) VALUES (0, 'N/D')",
             "INSERT IGNORE INTO Dim_Turno (SK_Turno, Designacao_Turno) VALUES (0, 'N/D')"
         ]
-        
         with self.engine.begin() as conn:
+            # NO_AUTO_VALUE_ON_ZERO permite inserir explicitamente SK=0
             conn.execute(text("SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';"))
             for q in queries:
                 conn.execute(text(q))
         self.logger.info("  Dummies SK=0 inseridos/validados com sucesso.")
 
-    # =========================================================================
-    # CARREGAMENTO DE DIMENSÕES COM PK FIXA (Data, Hora)
-    # =========================================================================
+    # Dimensões com PK fixa (Data, Hora)
+
     def load_fixed_pk_dimension(self, df_dim: pd.DataFrame, table_name: str, sk_name: str):
-        """Carrega dimensões cuja PK não é AUTO_INCREMENT (Data, Hora)."""
+        # Para dimensões onde a PK não é AUTO_INCREMENT — insere só os SKs que ainda não existem
         with self.engine.begin() as conn:
             existing_sks = set(
                 pd.read_sql(text(f"SELECT {sk_name} FROM {table_name}"), conn)[sk_name].values
@@ -70,10 +66,10 @@ class DataLoader:
             else:
                 self.logger.info(f"[{table_name}] Já populada.")
 
-    # =========================================================================
-    # CARREGAMENTO DE DIMENSÕES DINÂMICAS (SCD Tipo 1)
-    # =========================================================================
+    # Dimensões dinâmicas — SCD Tipo 1
+
     def load_dimension_scd1(self, df: pd.DataFrame, table_name: str, natural_keys: List[str], sk_name: str) -> pd.DataFrame:
+        # SCD1 — sem histórico: se o registo já existe, não faz nada; se é novo, insere
         nk_valid = [k for k in natural_keys if k in df.columns]
         if not nk_valid:
             df[sk_name] = 0
@@ -86,7 +82,7 @@ class DataLoader:
 
         with self.engine.begin() as conn:
             existing_df = pd.read_sql(text(f"SELECT * FROM {table_name}"), conn)
-            
+
             if not existing_df.empty:
                 for key in nk_valid:
                     if key in dim_df.columns and key in existing_df.columns:
@@ -105,7 +101,6 @@ class DataLoader:
         with self.engine.connect() as conn:
             existing_df = pd.read_sql(text(f"SELECT * FROM {table_name}"), conn)
 
-        # Lookup
         if sk_name in df.columns:
             df = df.drop(columns=[sk_name])
 
@@ -115,6 +110,7 @@ class DataLoader:
                 if key in df.columns:
                     df[key] = df[key].astype(str)
                     existing_df[key] = existing_df[key].astype(str)
+            # Faz o lookup da SK pelo(s) natural key(s)
             lookup = existing_df[merge_cols + [sk_name]].drop_duplicates(subset=merge_cols, keep='first')
             df = pd.merge(df, lookup, on=merge_cols, how='left')
             df[sk_name] = df[sk_name].fillna(0).astype(int)
@@ -123,10 +119,10 @@ class DataLoader:
 
         return df
 
-    # =========================================================================
-    # CARREGAMENTO DE DIMENSÕES DINÂMICAS (SCD Tipo 2)
-    # =========================================================================
+    # Dimensões dinâmicas — SCD Tipo 2
+
     def load_dimension_scd2(self, df: pd.DataFrame, table_name: str, natural_keys: List[str], sk_name: str) -> pd.DataFrame:
+        # SCD2 — com histórico: registo alterado é expirado (Valid_To, Is_Active=0) e inserido novo
         nk_valid = [k for k in natural_keys if k in df.columns]
         if not nk_valid:
             df[sk_name] = 0
@@ -141,6 +137,7 @@ class DataLoader:
         current_date = datetime.now().strftime('%Y-%m-%d')
 
         with self.engine.begin() as conn:
+            # Só lê registos ativos — os expirados não interessam para o lookup
             existing_df = pd.read_sql(text(f"SELECT * FROM {table_name} WHERE Is_Active = 1"), conn)
 
             if not existing_df.empty:
@@ -156,25 +153,25 @@ class DataLoader:
                 merged = pd.merge(dim_df, existing_df, on=nk_valid, how='left', suffixes=('', '_db'), indicator=True)
                 new_records = merged[merged['_merge'] == 'left_only'][dim_df.columns].copy()
 
+                # Deteta registos cujos atributos mudaram (excluindo as natural keys)
                 compare_cols = [c for c in dim_df.columns if c not in nk_valid and c in existing_df.columns]
                 changed_records = pd.DataFrame()
-                
+
                 if compare_cols:
                     both = merged[merged['_merge'] == 'both'].copy()
                     changed_mask = pd.Series([False] * len(both), index=both.index)
                     for col in compare_cols:
                         changed_mask |= (both[col] != both[f"{col}_db"])
-                    
                     changed_records = both[changed_mask]
 
                 if not changed_records.empty:
+                    # Expira os registos antigos antes de inserir os novos
                     sks_to_expire = changed_records[f"{sk_name}_db"].tolist()
                     if sks_to_expire:
                         conn.execute(
                             text(f"UPDATE {table_name} SET Valid_To = :current_date, Is_Active = 0 WHERE {sk_name} IN :sks"),
                             {"current_date": current_date, "sks": tuple(sks_to_expire)}
                         )
-                    
                     changed_inserts = changed_records[dim_df.columns].copy()
                     new_records = pd.concat([new_records, changed_inserts], ignore_index=True)
             else:
@@ -182,15 +179,14 @@ class DataLoader:
 
             if not new_records.empty:
                 new_records['Valid_From'] = current_date
-                new_records['Valid_To'] = '9999-12-31'
-                new_records['Is_Active'] = 1
+                new_records['Valid_To']   = '9999-12-31'
+                new_records['Is_Active']  = 1
                 new_records.to_sql(table_name.lower(), conn, if_exists='append', index=False)
                 self.logger.info(f"[{table_name}] {len(new_records)} novos/atualizados registos inseridos (SCD2).")
 
         with self.engine.connect() as conn:
             lookup_df = pd.read_sql(text(f"SELECT {','.join(nk_valid)}, {sk_name} FROM {table_name} WHERE Is_Active = 1"), conn)
 
-        # Lookup
         if sk_name in df.columns:
             df = df.drop(columns=[sk_name])
 
@@ -205,10 +201,10 @@ class DataLoader:
 
         return df
 
-    # =========================================================================
-    # PAYLOAD DA FACTO E CARREGAMENTO
-    # =========================================================================
+    # Tabela de factos
+
     def prepare_fact_payload(self, df: pd.DataFrame) -> pd.DataFrame:
+        # Garante que todas as SKs existem e são inteiros — usa 0 (dummy) se estiverem em falta
         required_sks = [
             'SK_Data', 'SK_Hora_Inicio', 'SK_Hora_Fim',
             'SK_Espaco', 'SK_Unidade_Curricular', 'SK_Curso',
@@ -235,6 +231,7 @@ class DataLoader:
         return df[valid_cols].copy()
 
     def load_fact(self, df_fact: pd.DataFrame, table_name: str = "Facto_Ocupacao", chunk_size: int = 5000):
+        # Insere só os factos novos — evita duplicados comparando o ID_Ocupacao com o que já está na BD
         with self.engine.begin() as conn:
             conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
             try:
@@ -247,8 +244,9 @@ class DataLoader:
                 if novos.empty:
                     self.logger.info(f"[{table_name}] Nenhum facto novo a carregar.")
                 else:
-                    total = len(novos)
+                    total  = len(novos)
                     loaded = 0
+                    # Insere em chunks para não sobrecarregar a memória nem a BD
                     for i in range(0, total, chunk_size):
                         chunk = novos.iloc[i:i+chunk_size]
                         chunk.to_sql(table_name.lower(), conn, if_exists='append', index=False)
@@ -257,10 +255,10 @@ class DataLoader:
             finally:
                 conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
 
-    # =========================================================================
-    # MÉTRICAS DE QUALIDADE
-    # =========================================================================
+    # Métricas de qualidade
+
     def print_quality_metrics(self, df: pd.DataFrame):
+        # Mostra a percentagem de factos com SK válida (>0) para cada dimensão
         sk_columns = [c for c in df.columns if c.startswith('SK_')]
         if not sk_columns:
             return

@@ -1,8 +1,3 @@
-"""
-cleanup_dw.py — Script utilitário para limpeza completa do Data Warehouse.
-Trunca todas as tabelas dinâmicas e repõe os Dummy Records (SK=0).
-Utiliza as credenciais do ficheiro .env.
-"""
 import os
 import sys
 import logging
@@ -16,16 +11,17 @@ logger = logging.getLogger("Cleanup")
 
 
 def get_engine():
-    """Cria o motor de ligação usando as variáveis de ambiente."""
-    user = os.getenv('DB_USER', 'root')
+    # Lê as credenciais do .env — nunca hardcoded no código
+    user     = os.getenv('DB_USER', 'root')
     password = os.getenv('DB_PASSWORD', '')
-    host = os.getenv('DB_HOST', 'localhost')
-    port = os.getenv('DB_PORT', '3306')
-    db_name = os.getenv('DB_NAME', 'dw_ocupacao')
+    host     = os.getenv('DB_HOST', 'localhost')
+    port     = os.getenv('DB_PORT', '3306')
+    db_name  = os.getenv('DB_NAME', 'dw_ocupacao')
     return create_engine(f"mysql+pymysql://{user}:{password}@{host}:{port}/{db_name}", future=True)
 
 
 def migrate_schema(engine):
+    # Adiciona colunas novas se ainda não existirem — seguro de correr várias vezes
     logger.info("A verificar/migrar colunas novas no schema...")
     with engine.begin() as conn:
         for stmt in [
@@ -46,6 +42,7 @@ def reset_dw():
     try:
         logger.info("A iniciar limpeza do Data Warehouse...")
 
+        # Desativa as foreign keys para poder truncar as tabelas sem erros de integridade
         conn.execute(text("SET FOREIGN_KEY_CHECKS = 0;"))
 
         tables = [
@@ -63,8 +60,9 @@ def reset_dw():
         conn.execute(text("SET FOREIGN_KEY_CHECKS = 1;"))
         conn.commit()
 
-        # Reposição dos Dummy Records
+        # Reposição dos Dummy Records (SK=0) — registos especiais para factos sem dimensão conhecida
         logger.info("A repor registos de integridade (SK=0)...")
+        # NO_AUTO_VALUE_ON_ZERO permite inserir explicitamente SK=0
         conn.execute(text("SET sql_mode = 'NO_AUTO_VALUE_ON_ZERO';"))
 
         dummies = [

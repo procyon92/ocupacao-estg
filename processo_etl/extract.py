@@ -6,12 +6,10 @@ from pathlib import Path
 from typing import Optional, List
 from io import StringIO
 
+
 class DataExtractor:
-    """
-    Responsável estritamente pela ingestão de dados de fontes heterogéneas.
-    Garante que os dados chegam à Staging Area com colunas normalizadas em
-    snake_case e sem qualquer transformação de negócio.
-    """
+    # Responsável apenas pela ingestão de dados — sem transformações de negócio.
+    # Dados chegam à Staging Area com colunas normalizadas em snake_case.
 
     def __init__(self, base_path: str = "Dados"):
         self.base_path = Path(base_path)
@@ -19,7 +17,7 @@ class DataExtractor:
 
     @staticmethod
     def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
-        """Normaliza todos os nomes de colunas para snake_case."""
+        # Converte todos os nomes de colunas para snake_case limpo
         df.columns = (
             df.columns
             .astype(str)
@@ -34,10 +32,7 @@ class DataExtractor:
 
     @staticmethod
     def _sanitize_strings(df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Sanitização universal de strings após extração.
-        Remove carriage returns e caracteres de encoding espúrios.
-        """
+        # Remove carriage returns e caracteres de encoding espúrios de todas as colunas de texto
         string_cols = df.select_dtypes(include=['object', 'string']).columns
         for col in string_cols:
             df[col] = (
@@ -48,14 +43,12 @@ class DataExtractor:
                 .str.replace(r'^\?+', '', regex=True)
                 .str.strip()
             )
-            # Reverter "nan" literal gerado pela conversão astype(str) em nulos reais
+            # "nan" literal gerado pelo astype(str) é revertido para nulo real
             df[col] = df[col].replace('nan', pd.NA)
         return df
 
     def extract_csv(self, filename: str, sep: str = ",", encoding: str = "utf-8", **kwargs) -> Optional[pd.DataFrame]:
-        """
-        Extrai dados brutos de ficheiros delimitados.
-        """
+        # Lê um ficheiro delimitado e devolve um DataFrame com colunas normalizadas
         file_path = self.base_path / filename
         if not file_path.exists():
             self.logger.error(f"Ficheiro {filename} não encontrado em {self.base_path}.")
@@ -73,10 +66,7 @@ class DataExtractor:
             return None
 
     def extract_sql_dump(self, filename: str, table_name: str, expected_columns: List[str]) -> Optional[pd.DataFrame]:
-        """
-        Realiza o parsing dinâmico de ficheiros .sql para extrair registos brutos
-        de uma tabela específica, garantindo desacoplamento do schema.
-        """
+        # Faz parsing de um ficheiro .sql e extrai os registos de uma tabela específica
         file_path = self.base_path / filename
         if not file_path.exists():
             self.logger.error(f"Ficheiro SQL {filename} não encontrado.")
@@ -88,15 +78,15 @@ class DataExtractor:
                 content = f.read()
 
             data = []
-            # Regex dinâmico para mitigar quebra estrutural no ficheiro
+            # Regex dinâmico para capturar blocos VALUES mesmo com quebras de linha no ficheiro
             pattern = rf"INSERT INTO `{table_name}`.*?(?:VALUES\s*)(.+?);"
             matches = re.finditer(pattern, content, re.IGNORECASE | re.DOTALL)
 
             for match in matches:
                 tuples_str = match.group(1).strip()
-                # Separação robusta de tuplos, prevenindo divisão errática por vírgulas em strings
+                # Divide os tuplos pelo padrão ),(  sem partir strings que contenham vírgulas
                 rows = re.split(r'\),\s*\(', tuples_str.strip('()'))
-                
+
                 for row in rows:
                     row = row.strip('()')
                     reader = csv.reader(
@@ -112,6 +102,7 @@ class DataExtractor:
                         if len(clean_row) == len(expected_columns):
                             data.append(clean_row)
                         else:
+                            # Linha com número de colunas diferente do esperado — descartada
                             self.logger.warning(f"Desalinhamento de schema ignorado na tabela {table_name}.")
 
             df = pd.DataFrame(data, columns=expected_columns)

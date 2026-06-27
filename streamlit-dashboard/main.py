@@ -86,18 +86,18 @@ def _sem_index() -> int:
 
 # Widgets visíveis por página — controla o que aparece na sidebar
 _PROFILE_WIDGETS: dict[str, list[str]] = {
-    "Visão Geral":    ["ano_letivo", "semestre", "semana", "dias",
+    "Visão Geral":    ["ano_letivo", "semestre", "semana",
                        "escola", "edificio", "categoria_espaco", "espaco",
                        "ciclo_estudo", "epoca", "curso", "uc",
                        "hide_online", "hide_ghost", "hide_concurrent"],
-    "Laboratórios":   ["ano_letivo", "semestre", "semana", "dias",
+    "Laboratórios":   ["ano_letivo", "semestre", "semana",
                        "escola", "categoria_espaco", "edificio", "espaco",
                        "ciclo_estudo", "epoca", "curso", "uc",
                        "hide_online", "hide_ghost", "hide_concurrent"],
-    "Alertas":        ["ano_letivo", "semestre", "semana", "dias",
+    "Alertas":        ["ano_letivo", "semestre", "semana",
                        "escola", "departamento", "categoria_espaco", "edificio",
                        "epoca", "hide_online", "hide_ghost", "hide_concurrent"],
-    "Comparação":     ["ano_letivo", "semestre", "semana", "dias",
+    "Comparação":     ["ano_letivo", "semestre", "semana",
                        "escola", "categoria_espaco", "edificio",
                        "epoca", "hide_online", "hide_ghost", "hide_concurrent"],
     "Detalhe Sala":   ["ano_letivo", "semestre",

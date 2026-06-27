@@ -60,7 +60,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
                   (df["DataCompleta"].dt.date <= week_end.date())].copy()
 
     elif vista == "Mês":
-        # Period do pandas agrupa por mês automaticamente (ex: 2024-10)
+        # Period do pandas agrupa por mês automaticamente
         available_months = sorted(df["DataCompleta"].dt.to_period("M").unique())
         with col_nav1:
             sel_month = st.selectbox(

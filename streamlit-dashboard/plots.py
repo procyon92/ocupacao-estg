@@ -632,7 +632,7 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
                 y=(t_start + t_end) / 2,
                 text=label,
                 showarrow=False,
-                font=dict(size=8, color="white"),
+                font=dict(size=16, color="white"),
                 xref="x", yref="y",
                 align="center",
                 xanchor="center", yanchor="middle",
@@ -672,7 +672,7 @@ def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
     # Cabeçalho com os nomes dos dias
     for col_i, dname in enumerate(day_names):
         fig.add_annotation(x=col_i + 0.5, y=1.04, text=f"<b>{dname}</b>",
-                           showarrow=False, font=dict(size=12, color="#475569"),
+                           showarrow=False, font=dict(size=16, color="#475569"),
                            xref="x", yref="paper", xanchor="center")
 
     for row_i, week in enumerate(cal_matrix):
@@ -730,7 +730,7 @@ def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
                     x=(x0 + x1) / 2, y=(ev_y_top + ev_y_bot) / 2,
                     text=label,
                     showarrow=False,
-                    font=dict(size=7, color="white"),
+                    font=dict(size=10, color="white"),
                     xref="x", yref="paper",
                     align="center",
                     xanchor="center", yanchor="middle",

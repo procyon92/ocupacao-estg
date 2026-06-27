@@ -133,4 +133,12 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception:
+        # Regista o traceback completo no log antes de terminar
+        logging.getLogger("ETL_Orchestrator").critical(
+            "ERRO NÃO APANHADO — pipeline terminado inesperadamente.",
+            exc_info=True
+        )
+        sys.exit(1)

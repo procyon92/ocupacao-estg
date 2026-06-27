@@ -16,6 +16,15 @@ def _img_to_b64(path: str) -> str:
 
 
 def login_page():
+    # Esconde a sidebar e qualquer outro elemento que possa aparecer durante o rerun
+    st.markdown("""
+    <style>
+        [data-testid="stSidebar"]        { display: none !important; }
+        [data-testid="stHeader"]         { display: none !important; }
+        section[data-testid="stMain"]    { background: #F1F5F9 !important; }
+    </style>
+    """, unsafe_allow_html=True)
+
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
         # Logo — se não existir, mostra um placeholder com a letra "E"
@@ -39,15 +48,21 @@ def login_page():
         )
 
         with st.form("login_form"):
-            username = st.text_input("Utilizador", placeholder="admin")
-            password = st.text_input("Palavra-passe", type="password", placeholder="••••••••")
+            username  = st.text_input("Utilizador", placeholder="admin")
+            password  = st.text_input("Palavra-passe", type="password", placeholder="••••••••")
             submitted = st.form_submit_button("Entrar", use_container_width=True)
 
             if submitted:
-                # Verifica as credenciais e autentica — st.rerun() recarrega a app já autenticada
                 if username in AUTH_USERS and AUTH_USERS[username] == password:
                     st.session_state["authenticated"] = True
-                    st.session_state["username"] = username
+                    st.session_state["username"]      = username
+                    # Esconde o form antes do rerun para evitar o flash
+                    st.markdown("""
+                    <style>
+                        [data-testid="stForm"]    { display: none !important; }
+                        [data-testid="stColumns"] { display: none !important; }
+                    </style>
+                    """, unsafe_allow_html=True)
                     st.rerun()
                 else:
                     st.error("❌ Credenciais inválidas.")

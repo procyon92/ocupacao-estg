@@ -1,9 +1,8 @@
-"""profiles/comparison.py — Profile F: Comparação de Ocupação entre Salas."""
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
 from models import Filters
-from profiles.base import BaseProfile
+from view.base import BaseProfile
 from queries import get_space_detail_data, get_espacos
 from transforms import normalize_dataframe
 from components import render_spacer, render_section_header
@@ -12,7 +11,7 @@ from config import DAILY_CAPACITY_MINUTES
 from plots import chart_top_espacos, chart_comparison_trend
 
 
-class ComparisonProfile(BaseProfile):
+class ComparacaoProfile(BaseProfile):
     def render(self, filters: Filters) -> None:
         self._h2("Comparação de Ocupação entre Salas")
         self._subtitle("Selecione várias salas para comparar as suas métricas de ocupação.")
@@ -23,12 +22,13 @@ class ComparisonProfile(BaseProfile):
         )
         selected_rooms = st.multiselect(
             "Salas para comparar", options=all_rooms, default=[],
-            key="v4_compare_rooms", max_selections=10,
+            key="compare_rooms", max_selections=10,
         )
 
         if not selected_rooms:
             return self._empty("Selecione pelo menos uma sala para começar a comparação.")
 
+        # Carrega os dados de cada sala selecionada
         rooms_data: dict[str, pd.DataFrame] = {}
         with st.spinner("A carregar dados das salas..."):
             for room in selected_rooms:
@@ -64,6 +64,7 @@ class ComparisonProfile(BaseProfile):
 
         render_spacer()
         render_section_header("Sessões por Sala")
+        # Junta todos os DataFrames numa coluna Nome_Espaco para o gráfico de barras
         combined = pd.concat(
             [rd.assign(Nome_Espaco=name) for name, rd in rooms_data.items()],
             ignore_index=True,

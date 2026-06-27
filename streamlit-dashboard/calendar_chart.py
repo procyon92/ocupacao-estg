@@ -4,10 +4,8 @@ from plots import chart_calendar_day, chart_calendar_week, chart_calendar_month
 
 
 def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Render do calendário de horários. Devolve o subset do df
-    correspondente à vista/período actualmente seleccionado.
-    """
+    # Renderiza o calendário de horários e devolve o subset do df
+    # correspondente ao período atualmente selecionado (dia, semana ou mês)
     if df.empty:
         st.info("Sem dados para o calendário.")
         return df
@@ -34,7 +32,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
 
     elif vista == "Semana":
         df["week_start"] = df["DataCompleta"].dt.to_period("W").apply(lambda p: p.start_time)
-        # Mapeia cada week_start para a semana letiva (Numero_Semana_Escolar) correspondente
+        # Para cada semana civil, guarda o número da semana letiva mais baixo
         week_sl_map = (
             df.groupby(df["week_start"].dt.date)["Numero_Semana_Escolar"]
             .min()
@@ -50,6 +48,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
             )
         week_ts  = pd.Timestamp(sel_week)
         week_end = week_ts + pd.Timedelta(days=6)
+        # Gera os dias da semana, mas para no max_date se o mês acabar antes
         week_dates = [week_ts + pd.Timedelta(days=i) for i in range(7)
                       if (week_ts + pd.Timedelta(days=i)).date() <= max_date]
         sl_num = week_sl_map.get(sel_week, "?")
@@ -60,6 +59,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
                   (df["DataCompleta"].dt.date <= week_end.date())].copy()
 
     elif vista == "Mês":
+        # Period do pandas agrupa por mês automaticamente (ex: 2024-10)
         available_months = sorted(df["DataCompleta"].dt.to_period("M").unique())
         with col_nav1:
             sel_month = st.selectbox(

@@ -1,20 +1,19 @@
-"""profiles/empty_rooms.py — Profile G: Consulta de Salas Livres por Intervalo."""
 from __future__ import annotations
 from datetime import datetime
 import streamlit as st
 from models import Filters
-from profiles.base import BaseProfile
+from view.base import BaseProfile
 from queries import get_free_rooms_by_interval, get_filtered_rooms_count
 from components import render_kpi, render_spacer
 from utils import pct
 
 
-class EmptyRoomsProfile(BaseProfile):
+class EspacosVaziosProfile(BaseProfile):
     def render(self, filters: Filters) -> None:
         self._h2("Consulta de Salas Livres por Intervalo")
         self._subtitle(
             "Selecione o dia e o intervalo horário pretendido. A plataforma irá listar "
-            "apenas as salas que se encontram totalmente disponíveis durante todo o bloco selecionado."
+            "apenas as salas que se encontram disponíveis durante todo o bloco selecionado."
         )
 
         col_date, col_h_ini, col_h_fim = st.columns([2, 1, 1])
@@ -39,24 +38,25 @@ class EmptyRoomsProfile(BaseProfile):
         edi = filters.get("edificio")
         cat = filters.get("categoria_espaco")
 
-        df_free     = get_free_rooms_by_interval(
+        df_free = get_free_rooms_by_interval(
             data_pesquisa=str(search_date),
             hora_inicio=search_hour_ini,
             hora_fim=search_hour_fim,
             escola=esc, departamento=dep, edificio=edi, categoria_espaco=cat,
         )
-        total_rooms = get_filtered_rooms_count(escola=esc, edificio=edi,
-                                               categoria_espaco=cat, departamento=dep)
+        total_rooms = get_filtered_rooms_count(
+            escola=esc, edificio=edi, categoria_espaco=cat, departamento=dep
+        )
 
-        vazias_count      = len(df_free)
-        ocupadas_count    = max(total_rooms - vazias_count, 0)
+        vazias_count       = len(df_free)
+        ocupadas_count     = max(total_rooms - vazias_count, 0)
         tx_disponibilidade = round(pct(vazias_count, total_rooms), 1)
 
         k1, k2, k3, k4 = st.columns(4)
-        with k1: render_kpi("Salas Vazias",      f"{vazias_count:,}", "🟢")
-        with k2: render_kpi("Salas Ocupadas",    f"{ocupadas_count:,}", "🏢")
-        with k3: render_kpi("Total de Espaços",  f"{total_rooms:,}", "📐")
-        with k4: render_kpi("Disponibilidade",   f"{tx_disponibilidade}%", "📊")
+        with k1: render_kpi("Salas Vazias",     f"{vazias_count:,}", "🟢")
+        with k2: render_kpi("Salas Ocupadas",   f"{ocupadas_count:,}", "🏢")
+        with k3: render_kpi("Total de Espaços", f"{total_rooms:,}", "📐")
+        with k4: render_kpi("Disponibilidade",  f"{tx_disponibilidade}%", "📊")
 
         render_spacer(1.5)
         data_pt = search_date.strftime("%d/%m/%Y")

@@ -1,8 +1,3 @@
-"""
-main.py — Entry point.
-Handles authentication, navigation, and shared filter state.
-Delegates actual rendering to profile classes in profiles/.
-"""
 from __future__ import annotations
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -10,7 +5,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from datetime import datetime
 import streamlit as st
 
-from config import APP_TITLE, PAGE_TITLE, FAVICON, LAB_CATEGORY, Sentinel, CACHE_TTL_COLD
+from config import APP_TITLE, PAGE_TITLE, FAVICON, LAB_CATEGORY, Omisso, CACHE_TTL_COLD
 from auth import check_auth, login_page, logout
 from models import Filters, SessionKeys
 from queries import (
@@ -18,15 +13,15 @@ from queries import (
     get_categorias, get_espacos, get_ciclos_estudo, get_cursos, get_ucs,
     get_epocas, get_dias_semana, get_semanas,
 )
-from profiles.general_view    import GeneralProfile
-from profiles.labs_view      import LabsProfile
-from profiles.space_detail_view import SpaceDetailProfile
-from profiles.quality_view    import QualityProfile
-from profiles.alerts_view     import AlertsProfile
-from profiles.comparison_view import ComparisonProfile
-from profiles.empty_rooms_view import EmptyRoomsProfile
+from view.geral             import GeralProfile
+from view.laboratorios      import LaboratoriosProfile
+from view.detalhe_espaco    import DetalheEspacoProfile
+from view.qualidade         import QualidadeProfile
+from view.alertas           import AlertasProfile
+from view.comparacao        import ComparacaoProfile
+from view.espacos_vazios    import EspacosVaziosProfile
 
-# ── Page config ───────────────────────────────────────────────────────
+# Configuração da página
 st.set_page_config(
     page_title=PAGE_TITLE,
     page_icon=FAVICON,
@@ -34,12 +29,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── CSS ───────────────────────────────────────────────────────────────
+# CSS global
 _CSS_PATH = os.path.join(os.path.dirname(__file__), "assets", "style.css")
 with open(_CSS_PATH) as _f:
     st.markdown(f"<style>{_f.read()}</style>", unsafe_allow_html=True)
 
-# ── Margens laterais ──────────────────────────────────────────────────
 st.markdown("""
 <style>
 html body section[data-testid="stMain"] .block-container {
@@ -50,12 +44,12 @@ html body section[data-testid="stMain"] .block-container {
 </style>
 """, unsafe_allow_html=True)
 
-# ── Auth ──────────────────────────────────────────────────────────────
+# Autenticação — para tudo se não estiver autenticado
 if not check_auth():
     login_page()
     st.stop()
 
-# ── Navigation ────────────────────────────────────────────────────────
+# Navegação
 PROFILE_LABELS = [
     "Visão Geral", "Laboratórios", "Detalhe Sala",
     "Salas Vazias", "Alertas", "Comparação", "Qualidade",
@@ -73,7 +67,7 @@ with nav_cols[1]:
         unsafe_allow_html=True,
     )
 
-# ── Shared data ───────────────────────────────────────────────────────
+# Anos letivos disponíveis e semestre por defeito com base no mês atual
 _ANOS = get_anos_letivos()
 _DEFAULT_ANO = _ANOS[0] if _ANOS else None
 _MONTH = datetime.now().month
@@ -90,7 +84,7 @@ def _sem_index() -> int:
     return ([1, 2].index(val) + 1) if val in (1, 2) else 0
 
 
-# ── Widget presence per profile ───────────────────────────────────────
+# Widgets visíveis por página — controla o que aparece na sidebar
 _PROFILE_WIDGETS: dict[str, list[str]] = {
     "Visão Geral":    ["ano_letivo", "semestre", "semana", "dias",
                        "escola", "edificio", "categoria_espaco", "espaco",
@@ -101,7 +95,7 @@ _PROFILE_WIDGETS: dict[str, list[str]] = {
                        "ciclo_estudo", "epoca", "curso", "uc",
                        "hide_online", "hide_ghost", "hide_concurrent"],
     "Alertas":        ["ano_letivo", "semestre", "semana", "dias",
-                       "escola", "categoria_espaco", "edificio",
+                       "escola", "departamento", "categoria_espaco", "edificio",
                        "epoca", "hide_online", "hide_ghost", "hide_concurrent"],
     "Comparação":     ["ano_letivo", "semestre", "semana", "dias",
                        "escola", "categoria_espaco", "edificio",
@@ -114,41 +108,40 @@ _PROFILE_WIDGETS: dict[str, list[str]] = {
                        "escola", "departamento", "edificio"],
 }
 
-# ── Reset callback ────────────────────────────────────────────────────
+
 def _reset_filters() -> None:
     anos = get_anos_letivos()
     month = datetime.now().month
     defaults = {
-        SessionKeys.ANO_LETIVO:      anos[0] if anos else Sentinel.NO_FILTER,
+        SessionKeys.ANO_LETIVO:      anos[0] if anos else Omisso.NO_FILTER,
         SessionKeys.SEMESTRE:        (1 if month in {9,10,11,12,1,2}
                                       else 2 if month in {3,4,5,6,7}
-                                      else Sentinel.NO_FILTER),
-        SessionKeys.SEMANA:          Sentinel.NO_FILTER_F,
+                                      else Omisso.NO_FILTER),
+        SessionKeys.SEMANA:          Omisso.NO_FILTER_F,
         SessionKeys.DIAS:            [],
-        SessionKeys.ESCOLA:          Sentinel.NO_FILTER,
-        SessionKeys.DEPARTAMENTO:    Sentinel.NO_FILTER,
-        SessionKeys.EDIFICIO:        Sentinel.NO_FILTER,
-        SessionKeys.CATEGORIA:       Sentinel.NO_FILTER,
-        SessionKeys.ESPACO:          Sentinel.NO_FILTER,
-        SessionKeys.CICLO:           Sentinel.NO_FILTER,
-        SessionKeys.EPOCA:           Sentinel.NO_FILTER,
-        SessionKeys.CURSO:           Sentinel.NO_FILTER,
-        SessionKeys.UC:              Sentinel.NO_FILTER,
+        SessionKeys.ESCOLA:          Omisso.NO_FILTER,
+        SessionKeys.DEPARTAMENTO:    Omisso.NO_FILTER,
+        SessionKeys.EDIFICIO:        Omisso.NO_FILTER,
+        SessionKeys.CATEGORIA:       Omisso.NO_FILTER,
+        SessionKeys.ESPACO:          Omisso.NO_FILTER,
+        SessionKeys.CICLO:           Omisso.NO_FILTER,
+        SessionKeys.EPOCA:           Omisso.NO_FILTER,
+        SessionKeys.CURSO:           Omisso.NO_FILTER,
+        SessionKeys.UC:              Omisso.NO_FILTER,
         SessionKeys.HIDE_ONLINE:     False,
         SessionKeys.HIDE_GHOST:      False,
         SessionKeys.HIDE_CONCURRENT: False,
     }
     for key in SessionKeys.RESETTABLE:
-        st.session_state[key] = defaults.get(key, Sentinel.NO_FILTER)
+        st.session_state[key] = defaults.get(key, Omisso.NO_FILTER)
 
 
-# ── Active filters summary string ─────────────────────────────────────
 def _build_active_string(vals: dict) -> str:
     parts = []
     if vals.get("ano_letivo"):         parts.append(f"📅 {vals['ano_letivo']}")
     if vals.get("semestre"):           parts.append(f"Sem {vals['semestre']}")
-    # semana agora é semana letiva — mostra com prefixo "SL" para distinguir
-    if vals.get("semana") and vals["semana"] != Sentinel.NO_FILTER_F:
+    # SL = Semana Letiva, para distinguir de semana civil
+    if vals.get("semana") and vals["semana"] != Omisso.NO_FILTER_F:
         parts.append(f"SL {vals['semana']}")
     if vals.get("dias"):               parts.append(f"Dias: {', '.join(vals['dias'][:2])}{'…' if len(vals['dias'])>2 else ''}")
     if vals.get("escola"):             parts.append(f"🏛 {vals['escola']}")
@@ -160,7 +153,6 @@ def _build_active_string(vals: dict) -> str:
     return " | ".join(parts) if parts else "Sem filtros ativos"
 
 
-# ── Filter renderer ───────────────────────────────────────────────────
 def _render_filters(profile: str) -> dict:
     fw       = _PROFILE_WIDGETS[profile]
     is_lab   = profile == "Laboratórios"
@@ -188,53 +180,50 @@ def _render_filters(profile: str) -> dict:
 
         if wname == "ano_letivo":
             vals["ano_letivo"] = st.selectbox(
-                "Ano Letivo", [Sentinel.NO_FILTER] + _ANOS,
+                "Ano Letivo", [Omisso.NO_FILTER] + _ANOS,
                 index=_ano_index(_ANOS), key=SessionKeys.ANO_LETIVO,
             )
         elif wname == "semestre":
             vals["semestre"] = st.selectbox(
-                "Semestre", [Sentinel.NO_FILTER, 1, 2],
+                "Semestre", [Omisso.NO_FILTER, 1, 2],
                 index=_sem_index(), key=SessionKeys.SEMESTRE,
             )
         elif wname == "semana":
-            ano = vals.get("ano_letivo", Sentinel.NO_FILTER)
-            sem = vals.get("semestre",   Sentinel.NO_FILTER)
+            ano = vals.get("ano_letivo", Omisso.NO_FILTER)
+            sem = vals.get("semestre",   Omisso.NO_FILTER)
             semanas_disponiveis = get_semanas(
-                ano_letivo=ano if ano != Sentinel.NO_FILTER else None,
-                semestre=sem   if sem != Sentinel.NO_FILTER else None,
+                ano_letivo=ano if ano != Omisso.NO_FILTER else None,
+                semestre=sem   if sem != Omisso.NO_FILTER else None,
             )
             # Formata como "Semana 1", "Semana 2", etc. para clareza
-            opts_raw  = [Sentinel.NO_FILTER_F] + semanas_disponiveis
-            opts_disp = [Sentinel.NO_FILTER_F] + [f"Semana {s}" for s in semanas_disponiveis]
-            sel_disp  = st.selectbox(
-                "Semana Letiva", opts_disp, key=SessionKeys.SEMANA
-            )
-            # Guarda o valor numérico para usar nos filtros
-            if sel_disp == Sentinel.NO_FILTER_F:
-                vals["semana"] = Sentinel.NO_FILTER_F
+            opts_raw  = [Omisso.NO_FILTER_F] + semanas_disponiveis
+            opts_disp = [Omisso.NO_FILTER_F] + [f"Semana {s}" for s in semanas_disponiveis]
+            sel_disp  = st.selectbox("Semana Letiva", opts_disp, key=SessionKeys.SEMANA)
+            if sel_disp == Omisso.NO_FILTER_F:
+                vals["semana"] = Omisso.NO_FILTER_F
             else:
                 idx = opts_disp.index(sel_disp)
-                vals["semana"] = opts_raw[idx]   # int
+                vals["semana"] = opts_raw[idx]
         elif wname == "dias":
             vals["dias"] = st.multiselect(
                 "Dia da Semana", get_dias_semana(), default=[], key=SessionKeys.DIAS
             )
         elif wname == "escola":
             vals["escola"] = st.selectbox(
-                "Escola", [Sentinel.NO_FILTER] + get_escolas(), key=SessionKeys.ESCOLA
+                "Escola", [Omisso.NO_FILTER] + get_escolas(), key=SessionKeys.ESCOLA
             )
         elif wname == "departamento":
-            dept_map    = get_departamentos()
-            labels      = [Sentinel.NO_FILTER] + list(dept_map.keys())
-            sel_label   = st.selectbox("Departamento", labels, key=SessionKeys.DEPARTAMENTO)
-            vals["departamento_label"] = sel_label if sel_label != Sentinel.NO_FILTER else None
+            dept_map  = get_departamentos()
+            labels    = [Omisso.NO_FILTER] + list(dept_map.keys())
+            sel_label = st.selectbox("Departamento", labels, key=SessionKeys.DEPARTAMENTO)
+            vals["departamento_label"] = sel_label if sel_label != Omisso.NO_FILTER else None
             vals["departamento"] = (
-                dept_map.get(sel_label) if sel_label != Sentinel.NO_FILTER else None
+                dept_map.get(sel_label) if sel_label != Omisso.NO_FILTER else None
             )
         elif wname == "edificio":
             esc  = vals.get("escola")
-            esc  = esc if esc != Sentinel.NO_FILTER else None
-            opts = [Sentinel.NO_FILTER] + get_edificios(escola=esc, only_labs=is_lab)
+            esc  = esc if esc != Omisso.NO_FILTER else None
+            opts = [Omisso.NO_FILTER] + get_edificios(escola=esc, only_labs=is_lab)
             vals["edificio"] = st.selectbox("Edifício", opts, key=SessionKeys.EDIFICIO)
         elif wname == "categoria_espaco":
             if is_lab:
@@ -243,42 +232,42 @@ def _render_filters(profile: str) -> dict:
                 )
             else:
                 vals["categoria_espaco"] = st.selectbox(
-                    "Categoria", [Sentinel.NO_FILTER] + get_categorias(),
+                    "Categoria", [Omisso.NO_FILTER] + get_categorias(),
                     key=SessionKeys.CATEGORIA,
                 )
         elif wname == "espaco":
-            edf = vals.get("edificio",        Sentinel.NO_FILTER)
-            cat = vals.get("categoria_espaco", Sentinel.NO_FILTER)
-            opts = [Sentinel.NO_FILTER] + get_espacos(
-                edificio=edf if edf != Sentinel.NO_FILTER else None,
-                categoria=cat if cat != Sentinel.NO_FILTER else None,
+            edf = vals.get("edificio",        Omisso.NO_FILTER)
+            cat = vals.get("categoria_espaco", Omisso.NO_FILTER)
+            opts = [Omisso.NO_FILTER] + get_espacos(
+                edificio=edf if edf != Omisso.NO_FILTER else None,
+                categoria=cat if cat != Omisso.NO_FILTER else None,
                 only_labs=is_lab,
             )
             vals["espaco"] = st.selectbox("Sala", opts, key=SessionKeys.ESPACO)
         elif wname == "ciclo_estudo":
             vals["ciclo_estudo"] = st.selectbox(
                 "Ciclo Estudo",
-                [Sentinel.NO_FILTER] + get_ciclos_estudo(only_labs=is_lab),
+                [Omisso.NO_FILTER] + get_ciclos_estudo(only_labs=is_lab),
                 key=SessionKeys.CICLO,
             )
         elif wname == "epoca":
             vals["epoca"] = st.selectbox(
-                "Período/Época", [Sentinel.NO_FILTER] + get_epocas(), key=SessionKeys.EPOCA
+                "Período/Época", [Omisso.NO_FILTER] + get_epocas(), key=SessionKeys.EPOCA
             )
         elif wname == "curso":
-            ciclo = vals.get("ciclo_estudo", Sentinel.NO_FILTER)
-            ciclo = ciclo if ciclo != Sentinel.NO_FILTER else None
+            ciclo = vals.get("ciclo_estudo", Omisso.NO_FILTER)
+            ciclo = ciclo if ciclo != Omisso.NO_FILTER else None
             vals["curso"] = st.selectbox(
                 "Curso",
-                [Sentinel.NO_FILTER] + get_cursos(ciclo=ciclo, only_labs=is_lab),
+                [Omisso.NO_FILTER] + get_cursos(ciclo=ciclo, only_labs=is_lab),
                 key=SessionKeys.CURSO,
             )
         elif wname == "uc":
-            curso = vals.get("curso", Sentinel.NO_FILTER)
-            curso = curso if curso != Sentinel.NO_FILTER else None
+            curso = vals.get("curso", Omisso.NO_FILTER)
+            curso = curso if curso != Omisso.NO_FILTER else None
             vals["uc"] = st.selectbox(
                 "UC",
-                [Sentinel.NO_FILTER] + get_ucs(curso=curso, only_labs=is_lab),
+                [Omisso.NO_FILTER] + get_ucs(curso=curso, only_labs=is_lab),
                 key=SessionKeys.UC,
             )
         elif wname == "hide_online":
@@ -295,8 +284,8 @@ def _render_filters(profile: str) -> dict:
 
 
 def _extract_filters(vals: dict) -> Filters:
-    NF  = Sentinel.NO_FILTER
-    NFF = Sentinel.NO_FILTER_F
+    NF  = Omisso.NO_FILTER
+    NFF = Omisso.NO_FILTER_F
 
     def _v(key: str):
         val = vals.get(key)
@@ -315,7 +304,7 @@ def _extract_filters(vals: dict) -> Filters:
     if _v("uc"):                f["uc"]               = _v("uc")
     if _v("epoca"):             f["epoca"]            = _v("epoca")
 
-    # semana_escolar: só passa se for um inteiro válido (não o sentinel de string)
+    # semana_escolar: só passa se for um inteiro válido
     semana_raw = vals.get("semana")
     if semana_raw and semana_raw != NFF and semana_raw != NF:
         try:
@@ -329,7 +318,7 @@ def _extract_filters(vals: dict) -> Filters:
     return f
 
 
-# ── Sidebar ───────────────────────────────────────────────────────────
+# Sidebar
 with st.sidebar:
     st.markdown('<div class="sidebar-title">🔍 Filtros</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
@@ -344,11 +333,11 @@ with st.sidebar:
         logout()
     st.markdown("---")
 
-# ── Build typed filters dict ──────────────────────────────────────────
+# Constrói o dict de filtros tipado
 filters: Filters = _extract_filters(raw_vals)
 filters["only_labs"] = (profile == "Laboratórios")
 
-# ── Filtros ativos — barra no topo da página ──────────────────────────
+# Barra de filtros ativos no topo da página
 _active_str = _build_active_string(raw_vals)
 if _active_str != "Sem filtros ativos":
     st.markdown(
@@ -358,15 +347,15 @@ if _active_str != "Sem filtros ativos":
     )
     st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
 
-# ── Profile dispatch ──────────────────────────────────────────────────
+# Despacha para a view correta
 _PROFILE_REGISTRY: dict[str, type] = {
-    "Visão Geral":   GeneralProfile,
-    "Laboratórios":  LabsProfile,
-    "Detalhe Sala":  SpaceDetailProfile,
-    "Alertas":       AlertsProfile,
-    "Comparação":    ComparisonProfile,
-    "Qualidade":     QualityProfile,
-    "Salas Vazias":  EmptyRoomsProfile,
+    "Visão Geral":   GeralProfile,
+    "Laboratórios":  LaboratoriosProfile,
+    "Detalhe Sala":  DetalheEspacoProfile,
+    "Alertas":       AlertasProfile,
+    "Comparação":    ComparacaoProfile,
+    "Qualidade":     QualidadeProfile,
+    "Salas Vazias":  EspacosVaziosProfile,
 }
 
 if profile in _PROFILE_REGISTRY:

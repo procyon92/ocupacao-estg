@@ -1,6 +1,3 @@
-"""
-profiles/base.py — Abstract base class for all dashboard profiles.
-"""
 from __future__ import annotations
 from abc import ABC, abstractmethod
 import streamlit as st
@@ -9,17 +6,14 @@ from models import Filters
 
 
 class BaseProfile(ABC):
-    """
-    Each profile subclass implements render() and nothing else.
-    Shared rendering helpers live here so profiles stay thin.
-    """
+    # Cada view implementa apenas o render() — os helpers partilhados ficam aqui
 
     @abstractmethod
     def render(self, filters: Filters) -> None:
-        """Render this profile into the active Streamlit container."""
+        # Renderiza a view no container ativo do Streamlit
         ...
 
-    # ── Shared helpers ────────────────────────────────────────────────
+    # Helpers partilhados
 
     @staticmethod
     def _empty(msg: str = "Sem dados para os filtros selecionados.") -> None:

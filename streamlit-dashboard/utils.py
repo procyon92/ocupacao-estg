@@ -3,7 +3,7 @@ utils.py — Pure helper functions with no Streamlit or DB dependencies.
 Everything here is stateless and unit-testable in isolation.
 """
 from __future__ import annotations
-from config import Sentinel
+from config import Omisso
 
 
 def fmt_duration(minutes: float) -> str:
@@ -32,11 +32,11 @@ def fmt_duration_long(minutes: float) -> str:
 
 def normalize_docente(value: object) -> str:
     """
-    Replace a blank or single-char teacher name with the canonical sentinel.
+    Replace a blank or single-char teacher name with the canonical Omisso.
     Applied post-query so the display layer never sees raw empty strings.
     """
     if isinstance(value, str) and len(value.strip()) <= 1:
-        return Sentinel.INDEFINIDO
+        return Omisso.INDEFINIDO
     return value  # type: ignore[return-value]
 
 

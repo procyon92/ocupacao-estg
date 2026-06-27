@@ -6,7 +6,7 @@ No DB access, no Streamlit calls, no side effects.
 """
 from __future__ import annotations
 import pandas as pd
-from config import Sentinel, DAILY_CAPACITY_MINUTES
+from config import Omisso, DAILY_CAPACITY_MINUTES
 from utils import normalize_docente, clamp, pct
 
 

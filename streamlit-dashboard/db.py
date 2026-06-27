@@ -1,10 +1,3 @@
-"""
-db.py — Database connection pool via st.cache_resource.
-
-Uses a single persistent connection per Streamlit worker process,
-preventing the "one new connection per cached function call" anti-pattern.
-Falls back to a plain connection if the pool package is unavailable.
-"""
 from __future__ import annotations
 import logging
 import pymysql
@@ -13,15 +6,12 @@ from config import DB_CONFIG
 
 logger = logging.getLogger(__name__)
 
-
+# Pool = conjunto de ligações à BD que ficam abertas e prontas a reutilizar
 @st.cache_resource
 def _get_pool():
-    """
-    Returns a thread-safe connection pool (PersistentDB via DBUtils).
-    Created once per worker process; destroyed when the app restarts.
-    """
+    # Cria uma pool uma vez por processo e o Streamlit trata de a reutilizar
     try:
-        from dbutils.persistent_db import PersistentDB   # pip install dbutils
+        from dbutils.persistent_db import PersistentDB
         pool = PersistentDB(
             creator=pymysql,
             maxusage=None,
@@ -30,6 +20,7 @@ def _get_pool():
         logger.info("DBUtils PersistentDB pool created.")
         return pool
     except ImportError:
+        # Se o dbutils não estiver instalado, avisa e usa ligações diretas
         logger.warning(
             "dbutils not installed — falling back to direct connections. "
             "Run: pip install dbutils"
@@ -38,13 +29,8 @@ def _get_pool():
 
 
 def get_connection() -> pymysql.connections.Connection:
-    """
-    Return an open pymysql connection.
-    Callers are responsible for closing it (use inside try/finally).
-    """
+    # Tenta usar o pool; se não houver, abre uma ligação normal
     pool = _get_pool()
     if pool is not None:
         return pool.connection()
-    # Fallback: plain connection (still better than before thanks to
-    # @st.cache_data TTLs reducing call frequency)
     return pymysql.connect(**DB_CONFIG)

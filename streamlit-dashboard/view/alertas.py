@@ -1,16 +1,15 @@
-"""profiles/alerts.py — Profile E: Painel de Alertas (Critical Hours)."""
 from __future__ import annotations
 import streamlit as st
 from models import Filters
-from profiles.base import BaseProfile
-from profiles._helpers import load_and_prepare
+from view.base import BaseProfile
+from view._helpers import load_and_prepare
 from queries import get_filtered_rooms_count, get_occupancy_by_slot
 from transforms import compute_general_kpis
 from components import render_kpi, render_spacer, render_section_header
 from plots import chart_critical_heatmap
 
 
-class AlertsProfile(BaseProfile):
+class AlertasProfile(BaseProfile):
     def render(self, filters: Filters) -> None:
         self._h2("Painel de Alertas — Horários Críticos")
         self._subtitle(
@@ -20,9 +19,9 @@ class AlertsProfile(BaseProfile):
 
         col_s1, col_s2 = st.columns(2)
         with col_s1:
-            low_threshold  = st.slider("Limite Baixo-Médio (%)", 10, 50, 30, key="v4_alert_low")
+            low_threshold  = st.slider("Limite Baixo-Médio (%)", 10, 50, 30, key="alert_low")
         with col_s2:
-            high_threshold = st.slider("Limite Médio-Alto (%)",  51, 95, 70, key="v4_alert_high")
+            high_threshold = st.slider("Limite Médio-Alto (%)",  51, 95, 70, key="alert_high")
 
         if low_threshold >= high_threshold:
             st.error("O limite baixo-médio deve ser inferior ao limite médio-alto.")
@@ -35,6 +34,7 @@ class AlertsProfile(BaseProfile):
         total_rooms = get_filtered_rooms_count(
             escola=filters.get("escola"),
             edificio=filters.get("edificio"),
+            departamento=filters.get("departamento"),
             categoria_espaco=filters.get("categoria_espaco"),
         )
         kpi            = compute_general_kpis(df)
@@ -49,10 +49,12 @@ class AlertsProfile(BaseProfile):
         )
 
         if not df_slots.empty:
-            df_slots       = df_slots.copy()
+            df_slots = df_slots.copy()
+            # Percentagem de salas ocupadas em cada slot (dia × hora)
             df_slots["ratio"] = df_slots["Salas_Ocupadas"] / max(total_rooms, 1) * 100
             critical_count = (df_slots["ratio"] > high_threshold).sum()
-            tx_critica     = round(critical_count / max(len(df_slots), 1) * 100, 1)
+            # Percentagem de slots que ultrapassam o limite alto
+            tx_critica = round(critical_count / max(len(df_slots), 1) * 100, 1)
         else:
             tx_critica = 0
 

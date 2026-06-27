@@ -13,7 +13,7 @@ html, body, [data-testid="stApp"] {
     max-width: 100% !important;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────── */
+/* Sidebar */
 [data-testid="stSidebar"] {
     background: linear-gradient(180deg, #1B2139 0%, #141929 100%) !important;
     min-width: 230px !important;
@@ -65,11 +65,11 @@ header[data-testid="stHeader"] {
     margin-top: -0.4rem;
 }
 
-/* ── Hide Streamlit chrome ───────────────────────────────────────────── */
+/* Hide Streamlit chrome */
 #MainMenu { visibility: hidden; }
 footer    { visibility: hidden; }
 
-/* ── Navigation — segmented control ────────────────────────────────── */
+/* Navigation — segmented control */
 [data-testid="stSegmentedControl"] {
     gap: 0.2rem !important;
     flex-wrap: nowrap !important;
@@ -102,7 +102,7 @@ footer    { visibility: hidden; }
     white-space: nowrap;
 }
 
-/* ── Metric cards ────────────────────────────────────────────────────── */
+/* Metric cards */
 html body [data-testid="stMetric"] {
     background: #F6F8FC !important;
     border-radius: 14px !important;
@@ -118,7 +118,7 @@ html body [data-testid="stMetric"] > div > div {
     background: transparent !important;
 }
 
-/* ── Buttons ─────────────────────────────────────────────────────────── */
+/* Buttons */
 .stButton > button {
     border-radius: 10px !important;
     font-weight: 600 !important;
@@ -140,7 +140,7 @@ html body [data-testid="stMetric"] > div > div {
     border-color: rgba(255,255,255,0.35) !important;
 }
 
-/* ── Inputs ──────────────────────────────────────────────────────────── */
+/* Inputs */
 .stSelectbox, .stDateInput, .stMultiSelect {
     font-size: 0.88rem !important;
 }
@@ -170,7 +170,7 @@ html body [data-testid="stMetric"] > div > div {
     transition: all 0.2s ease !important;
 }
 
-/* ── Charts ──────────────────────────────────────────────────────────── */
+/* Charts */
 [data-testid="stPlotlyChart"] {
     background: white;
     border-radius: 16px;
@@ -183,7 +183,7 @@ html body [data-testid="stMetric"] > div > div {
     overflow: hidden;
 }
 
-/* ── Download button ─────────────────────────────────────────────────── */
+/* Download button */
 .stDownloadButton > button {
     background: linear-gradient(135deg, #3B63FB, #2246D4) !important;
     color: white !important;
@@ -195,7 +195,7 @@ html body [data-testid="stMetric"] > div > div {
     transform: translateY(-1px);
 }
 
-/* ── Sidebar text helpers ────────────────────────────────────────────── */
+/* Sidebar text helpers */
 .sidebar-title {
     font-size: 1.1rem;
     font-weight: 800;
@@ -230,7 +230,7 @@ html body [data-testid="stMetric"] > div > div {
     margin: 0.3rem 0;
 }
 
-/* ── Filtros ativos — barra no topo da página ────────────────────────── */
+/* Filtros ativos — barra no topo da página */
 .page-active-filters {
     display: inline-flex;
     flex-wrap: wrap;

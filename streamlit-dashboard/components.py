@@ -1,21 +1,12 @@
-"""
-components.py — Reusable Streamlit UI components.
-
-All functions render into the active Streamlit container.
-No SQL, no business logic, no state mutations.
-"""
 from __future__ import annotations
 import streamlit as st
 import pandas as pd
-from config import COLORS, DIMENSION_COVERAGE_COLS, Sentinel
+from config import COLORS, DIMENSION_COVERAGE_COLS, Omisso
 from utils import pct
 
 
 def render_kpi(label: str, value: str, icon: str = "", tooltip: str = "") -> None:
-    """
-    Single KPI card.
-    tooltip: shown on hover over the entire card (browser native title attribute).
-    """
+    # Cartão KPI com tooltip opcional — o tooltip aparece ao passar o rato por cima
     title_attr = ""
     if tooltip:
         safe = tooltip.replace('"', "&quot;").replace("'", "&#39;")
@@ -37,10 +28,7 @@ def render_kpi(label: str, value: str, icon: str = "", tooltip: str = "") -> Non
 
 
 def render_rooms_kpi_row(kpi: dict, total_rooms: int) -> None:
-    """
-    Standard 3-column rooms KPI row (occupied / free / total).
-    Shared by profiles A and E to eliminate duplication.
-    """
+    # Linha de KPIs de salas (ocupadas / livres / total) — partilhada entre várias views
     espacos_livres = max(total_rooms - kpi["espacos_ocupados"], 0)
     c1, c2, c3 = st.columns(3)
     with c1: render_kpi("Salas Ocupadas", f"{kpi['espacos_ocupados']:,}", "🏢")
@@ -66,13 +54,13 @@ def render_spacer(rem: float = 1.0) -> None:
 
 
 def render_dimension_coverage(df: pd.DataFrame) -> None:
-    """Dimension coverage table for the data quality profile."""
+    # Para cada dimensão, calcula quantos registos têm valor preenchido (diferente de N/D)
     coverage = []
     for label, col in DIMENSION_COVERAGE_COLS.items():
         if col not in df.columns:
             continue
         total  = len(df)
-        filled = (df[col] != Sentinel.ND).sum()
+        filled = (df[col] != Omisso.ND).sum()
         coverage.append({
             "Dimensão":    label,
             "Preenchidos": filled,

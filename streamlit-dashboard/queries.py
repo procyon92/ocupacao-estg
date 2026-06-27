@@ -1,12 +1,3 @@
-"""
-queries.py — Raw SQL → DataFrame layer.
-
-Rules:
-  - Every public function opens a connection via db.get_connection() and closes it in finally.
-  - Every query uses try/except pymysql.Error — DB errors surface as st.error(), never tracebacks.
-  - hide_online / hide_concurrent / hide_ghost are NOT here — they live in transforms.apply_post_filters().
-  - LIMIT and all user-supplied values use %s placeholders. No f-string interpolation of values.
-"""
 from __future__ import annotations
 import logging
 import pymysql
@@ -14,22 +5,23 @@ import pandas as pd
 import streamlit as st
 from db import get_connection
 from config import (
-    Sentinel, LAB_CATEGORY, WEEKDAY_ORDER,
+    Omisso, LAB_CATEGORY, WEEKDAY_ORDER,
     CACHE_TTL_HOT, CACHE_TTL_WARM, CACHE_TTL_COLD,
 )
 
 logger = logging.getLogger(__name__)
 
-# ── Helpers ───────────────────────────────────────────────────────────
+# Helpers
 
 _WEEKDAY_FIELD = ", ".join(f"'{d}'" for d in WEEKDAY_ORDER)
 
 def _weekday_order_clause(col: str = "d.DiaSemana") -> str:
+    # Garante que os dias da semana aparecem na ordem certa (Seg → Sex)
     return f"FIELD({col}, {_WEEKDAY_FIELD})"
 
 
 def _safe_read(sql: str, conn, params=None) -> pd.DataFrame:
-    """Execute a SELECT and return a DataFrame. Returns empty DF on any DB error."""
+    # Corre a query e devolve um DataFrame; se der erro, mostra mensagem e devolve DF vazio
     try:
         return pd.read_sql(sql, conn, params=params or [])
     except pymysql.Error as exc:
@@ -38,8 +30,9 @@ def _safe_read(sql: str, conn, params=None) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-# ── Cascade filter map ────────────────────────────────────────────────
-# (select_alias, column, dim_table, dim_alias, fk_col_in_fact)
+# Mapa de filtros em cascata
+# Cada entrada define como ligar um filtro à tabela de factos:
+# (alias_select, coluna, tabela_dim, alias_dim, fk_na_facto)
 _FILTER_COLUMNS: dict[str, tuple[str, str, str, str, str]] = {
     "ano_letivo":       ("d",  "Ano_Escolar",       "Dim_Data",               "d",  "SK_Data"),
     "semestre":         ("d",  "Semestre",           "Dim_Data",               "d",  "SK_Data"),
@@ -59,7 +52,7 @@ def get_cascade_options(
     parent_filters: dict | None = None,
     only_labs: bool = False,
 ) -> list:
-    """Return distinct non-ND values for target_column, optionally filtered by parent_filters."""
+    # Devolve os valores distintos de uma coluna, filtrando pelos pais já selecionados
     col_info = _FILTER_COLUMNS.get(target_column)
     if not col_info:
         return []
@@ -70,9 +63,10 @@ def get_cascade_options(
         joined: set[tuple[str, str]] = set()
         from_parts = ["Facto_Ocupacao f"]
         where: list[str] = [f"{alias}.{column} != %s"]
-        params: list = [Sentinel.ND]
+        params: list = [Omisso.ND]
 
         def _join(tbl: str, al: str, fk: str) -> None:
+            # Só faz o JOIN se ainda não foi feito (evita duplicados)
             if (tbl, al) not in joined:
                 joined.add((tbl, al))
                 from_parts.append(f"JOIN {tbl} {al} ON f.{fk} = {al}.{fk}")
@@ -104,7 +98,7 @@ def get_cascade_options(
         conn.close()
 
 
-# ── Dimension lookups ─────────────────────────────────────────────────
+# Lookups de dimensões
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_anos_letivos() -> list[str]:
@@ -119,7 +113,7 @@ def get_escolas() -> list[str]:
             "SELECT DISTINCT Escola_Responsavel AS val FROM Dim_Espaco "
             "WHERE Escola_Responsavel NOT IN (%s, %s) ORDER BY val"
         )
-        df = _safe_read(sql, conn, [Sentinel.ND, Sentinel.INDEFINIDO])
+        df = _safe_read(sql, conn, [Omisso.ND, Omisso.INDEFINIDO])
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -127,19 +121,21 @@ def get_escolas() -> list[str]:
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_departamentos() -> dict[str, str]:
-    """Returns {short_display_label: full_dw_value}."""
+    # Devolve {label_curto: valor_completo_no_DW} para usar nos filtros
     conn = get_connection()
     try:
         sql = (
             "SELECT DISTINCT TRIM(Departamento) AS val FROM Dim_Espaco "
+            # Exclui nulos, strings vazias, e valores omissos
             "WHERE Departamento IS NOT NULL "
             "  AND TRIM(Departamento) != '' "
             "  AND TRIM(Departamento) NOT IN (%s, %s) "
             "ORDER BY val"
         )
-        df = _safe_read(sql, conn, [Sentinel.ND, Sentinel.INDEFINIDO])
+        df = _safe_read(sql, conn, [Omisso.ND, Omisso.INDEFINIDO])
         result: dict[str, str] = {}
         for v in df.get("val", pd.Series()).tolist():
+            # Remove o prefixo "Departamento de/do" para o label ficar mais limpo
             label = v.replace("Departamento de ", "").replace("Departamento do ", "").strip()
             result[label] = v
         return result
@@ -166,11 +162,11 @@ def get_espacos(
     departamento: str | None = None,
     only_labs: bool = False,
 ) -> list[str]:
-    """Single authoritative implementation — resolves the duplicate-definition bug."""
+    # Implementação única para espaços — evita ter a lógica duplicada em vários sítios
     conn = get_connection()
     try:
         where: list[str] = ["Nome_Espaco != %s", "is_online != 1"]
-        params: list = [Sentinel.ND]
+        params: list = [Omisso.ND]
         if edificio:
             where.append("Edificio = %s");          params.append(edificio)
         if categoria:
@@ -216,7 +212,7 @@ def get_epocas() -> list[str]:
             "JOIN Dim_Epoca ep ON f.SK_Epoca = ep.SK_Epoca "
             "WHERE ep.Descricao_Epoca != %s ORDER BY val"
         )
-        df = _safe_read(sql, conn, [Sentinel.ND])
+        df = _safe_read(sql, conn, [Omisso.ND])
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -232,7 +228,7 @@ def get_dias_semana() -> list[str]:
             "WHERE d.DiaSemana NOT IN (%s, 'Domingo') "
             f"ORDER BY {_weekday_order_clause('d.DiaSemana')}"
         )
-        df = _safe_read(sql, conn, [Sentinel.ND])
+        df = _safe_read(sql, conn, [Omisso.ND])
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -240,12 +236,7 @@ def get_dias_semana() -> list[str]:
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_semanas(ano_letivo: str | None = None, semestre: int | None = None) -> list[int]:
-    """
-    Devolve as semanas letivas disponíveis (Numero_Semana_Escolar).
-    Semana 0 é excluída — corresponde a dias antes do início do semestre.
-    Filtrado por ano letivo e semestre para que o dropdown mostre
-    apenas as semanas relevantes para a seleção atual.
-    """
+    # Semana 0 excluída — corresponde a dias antes do início do semestre
     conn = get_connection()
     try:
         sql = (
@@ -265,7 +256,7 @@ def get_semanas(ano_letivo: str | None = None, semestre: int | None = None) -> l
         conn.close()
 
 
-# ── Room counts ───────────────────────────────────────────────────────
+# Contagem de salas
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_filtered_rooms_count(
@@ -277,7 +268,7 @@ def get_filtered_rooms_count(
     conn = get_connection()
     try:
         where: list[str] = ["Nome_Espaco != %s", "is_online != 1"]
-        params: list = [Sentinel.ND]
+        params: list = [Omisso.ND]
         if escola:           where.append("Escola_Responsavel = %s"); params.append(escola)
         if departamento:     where.append("Departamento = %s");       params.append(departamento)
         if edificio:         where.append("Edificio = %s");           params.append(edificio)
@@ -292,8 +283,9 @@ def get_filtered_rooms_count(
         conn.close()
 
 
-# ── Fact queries ──────────────────────────────────────────────────────
+# Queries à tabela de factos
 
+# SELECT base reutilizado em get_filtered_data — junta todas as dimensões de uma vez
 _FACT_SELECT = """
     SELECT
         f.ID_Ocupacao,
@@ -364,14 +356,7 @@ def get_filtered_data(
     semana_escolar: int | None = None,
     only_labs: bool = False,
 ) -> pd.DataFrame:
-    """
-    Returns raw fact rows matching the given filters.
-    Post-query filtering (hide_online, hide_ghost, hide_concurrent)
-    is done separately in transforms.apply_post_filters().
-
-    semana_escolar filtra por Numero_Semana_Escolar (semana letiva real,
-    contada a partir do início do semestre académico).
-    """
+    # Filtros de pós-query (hide_online, hide_ghost, etc.) ficam em transforms.apply_post_filters()
     conn = get_connection()
     try:
         sql = _FACT_SELECT
@@ -492,10 +477,11 @@ def get_free_rooms_by_interval(
     edificio: str | None = None,
     categoria_espaco: str | None = None,
 ) -> pd.DataFrame:
+    # LEFT JOIN com subquery de salas ocupadas — o que ficar NULL está livre
     conn = get_connection()
     try:
         subquery_params: list = [data_pesquisa, hora_fim, hora_inicio]
-        main_params: list = [Sentinel.ND]
+        main_params: list = [Omisso.ND]
         main_where: list[str] = [
             "ocupadas.SK_Espaco IS NULL",
             "e_total.Nome_Espaco != %s",
@@ -529,10 +515,11 @@ def get_free_rooms_by_interval(
         conn.close()
 
 
-# ── ETL / Quality queries ─────────────────────────────────────────────
+# Qualidade do ETL
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_etl_quality_metrics() -> dict[str, int]:
+    # Conta registos totais vs registos com valores omissos nas dimensões principais
     conn = get_connection()
     try:
         cursor = conn.cursor()
@@ -555,13 +542,13 @@ def get_etl_quality_metrics() -> dict[str, int]:
                OR r.Docente_Responsavel IN (%s, %s)
             """,
             [
-                Sentinel.ND,
-                Sentinel.ND,
-                Sentinel.ND, Sentinel.SEM_UNIDADE,
-                Sentinel.ND,
-                Sentinel.ND,
-                Sentinel.ND,
-                Sentinel.ND, Sentinel.INDEFINIDO,
+                Omisso.ND,
+                Omisso.ND,
+                Omisso.ND, Omisso.SEM_UNIDADE,
+                Omisso.ND,
+                Omisso.ND,
+                Omisso.ND,
+                Omisso.ND, Omisso.INDEFINIDO,
             ],
         )
         errors: int = cursor.fetchone()[0]
@@ -577,24 +564,25 @@ def get_etl_quality_metrics() -> dict[str, int]:
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_unmapped_records_count() -> dict[str, int]:
     conn = get_connection()
+    # Cada entrada é (sql, params) — corre tudo com o mesmo cursor para eficiência
     _queries = {
         "UC Sem Mapeamento": (
             "SELECT COUNT(*) FROM Facto_Ocupacao f "
             "JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular "
             "WHERE uc.Designacao_UC IN (%s, %s)",
-            [Sentinel.ND, Sentinel.SEM_UNIDADE],
+            [Omisso.ND, Omisso.SEM_UNIDADE],
         ),
         "Curso Sem Mapeamento": (
             "SELECT COUNT(*) FROM Facto_Ocupacao f "
             "JOIN Dim_Curso c ON f.SK_Curso = c.SK_Curso "
             "WHERE c.Nome_Curso = %s OR c.Codigo_Curso = %s",
-            [Sentinel.ND, Sentinel.ND],
+            [Omisso.ND, Omisso.ND],
         ),
         "Responsável Indefinido": (
             "SELECT COUNT(*) FROM Facto_Ocupacao f "
             "JOIN Dim_Responsavel r ON f.SK_Responsavel = r.SK_Responsavel "
             "WHERE r.Docente_Responsavel IN (%s, %s)",
-            [Sentinel.ND, Sentinel.INDEFINIDO],
+            [Omisso.ND, Omisso.INDEFINIDO],
         ),
         "Ghost Sessions (0 Presenças)": (
             "SELECT COUNT(*) FROM Facto_Ocupacao WHERE Numero_Presencas = 0",
@@ -620,6 +608,7 @@ def get_ghost_sessions_trend(
     ano_escolar: str | None = None,
     semestre: int | None = None,
 ) -> pd.DataFrame:
+    # Ghost session = aula registada com 0 presenças
     conn = get_connection()
     try:
         sql = (
@@ -644,7 +633,7 @@ def get_ghost_sessions_trend(
 
 @st.cache_data(ttl=CACHE_TTL_HOT)
 def get_raw_anomalies(limit: int = 100) -> pd.DataFrame:
-    """LIMIT uses %s placeholder — no f-string interpolation."""
+    # LIMIT via %s — nunca interpolar diretamente na string SQL
     conn = get_connection()
     try:
         sql = """
@@ -679,14 +668,14 @@ def get_raw_anomalies(limit: int = 100) -> pd.DataFrame:
             LIMIT %s
         """
         params = [
-            # CASE params
-            Sentinel.ND, Sentinel.SEM_UNIDADE,
-            Sentinel.ND,
-            Sentinel.ND, Sentinel.INDEFINIDO,
-            # WHERE params
-            Sentinel.ND, Sentinel.SEM_UNIDADE,
-            Sentinel.ND,
-            Sentinel.ND, Sentinel.INDEFINIDO,
+            # params dos CASE
+            Omisso.ND, Omisso.SEM_UNIDADE,
+            Omisso.ND,
+            Omisso.ND, Omisso.INDEFINIDO,
+            # params do WHERE
+            Omisso.ND, Omisso.SEM_UNIDADE,
+            Omisso.ND,
+            Omisso.ND, Omisso.INDEFINIDO,
             int(limit),
         ]
         return _safe_read(sql, conn, params)

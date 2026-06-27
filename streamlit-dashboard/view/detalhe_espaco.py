@@ -1,26 +1,18 @@
-"""profiles/space_detail.py — Profile C: Detalhe de Espaço."""
 from __future__ import annotations
 import streamlit as st
 from models import Filters
-from profiles.base import BaseProfile
+from view.base import BaseProfile
 from queries import get_space_detail_data, get_espacos
 from transforms import normalize_dataframe
 from components import render_kpi, render_spacer, render_section_header
 from utils import clamp, pct
-from config import DAILY_CAPACITY_MINUTES
-from config import Sentinel
+from config import DAILY_CAPACITY_MINUTES, Omisso
 from plots import chart_single_space_heatmap, chart_monthly_calendar
 from calendar_chart import render_timetable_calendar
+from view.tooltips import TAXA_UTILIZACAO, GHOST
 
-_TOOLTIPS = {
-    "taxa":     (
-        "Percentagem do tempo disponível que foi efetivamente ocupado. "
-        "(minutos totais de ocupação) ÷ (salas ocupadas × dias com dados × 960 min/dia) × 100."
-    ),
-    "ghost":    "Percentagem de sessões com 0 presenças registadas.",
-}
 
-class SpaceDetailProfile(BaseProfile):
+class DetalheEspacoProfile(BaseProfile):
     def render(self, filters: Filters) -> None:
         self._h2("Detalhe de Espaço")
         self._subtitle("Selecione um espaço para ver a sua ocupação detalhada.")
@@ -30,12 +22,12 @@ class SpaceDetailProfile(BaseProfile):
             categoria=filters.get("categoria_espaco"),
             departamento=filters.get("departamento"),
         )
-        room_opts     = [Sentinel.NO_ROOM] + all_rooms
+        room_opts     = [Omisso.NO_ROOM] + all_rooms
         global_espaco = filters.get("espaco")
         idx = room_opts.index(global_espaco) if global_espaco in room_opts else 0
 
-        selected_room = st.selectbox("Espaço", room_opts, index=idx, key="v2_profile_c_room")
-        if selected_room == Sentinel.NO_ROOM:
+        selected_room = st.selectbox("Espaço", room_opts, index=idx, key="profile_c_room")
+        if selected_room == Omisso.NO_ROOM:
             return self._empty("Escolha um espaço para visualizar os detalhes.")
 
         df = normalize_dataframe(
@@ -59,8 +51,8 @@ class SpaceDetailProfile(BaseProfile):
         k1, k2, k3, k4 = st.columns(4)
         with k1: render_kpi("Horas Agendadas", f"{total_hours:,}h", "⏱️")
         with k2: render_kpi("Média Presenças", str(avg_class_size), "👥")
-        with k3: render_kpi("Taxa Utilização", f"{util_rate}%", "📊", _TOOLTIPS["taxa"])
-        with k4: render_kpi("Sessões Vazias",  f"{ghost_count:,}", "👻", _TOOLTIPS["ghost"])
+        with k3: render_kpi("Taxa Utilização", f"{util_rate}%", "📊", TAXA_UTILIZACAO)
+        with k4: render_kpi("Sessões Vazias",  f"{ghost_count:,}", "👻", GHOST)
 
         render_spacer(1.2)
         render_section_header("Ocupação Semanal e Calendário Mensal")
@@ -72,13 +64,13 @@ class SpaceDetailProfile(BaseProfile):
             c1, c2 = st.columns(2)
             with c1:
                 available_years = sorted(df["DataCompleta"].dt.year.unique(), reverse=True)
-                cal_year = st.selectbox("Ano", available_years, key="v2_cal_year")
+                cal_year = st.selectbox("Ano", available_years, key="cal_year")
             with c2:
                 cal_month = st.selectbox(
                     "Mês", range(1, 13),
                     format_func=lambda m: ["Jan","Fev","Mar","Abr","Mai","Jun",
                                            "Jul","Ago","Set","Out","Nov","Dez"][m-1],
-                    index=0, key="v2_cal_month",
+                    index=0, key="cal_month",
                 )
             st.plotly_chart(chart_monthly_calendar(df, int(cal_year), int(cal_month)),
                             use_container_width=True, key="chart_month_cal")
@@ -89,7 +81,7 @@ class SpaceDetailProfile(BaseProfile):
 
         render_spacer()
         render_section_header("Horário Analítico")
-
+        # Usa o subset filtrado pelo calendário se existir, senão usa tudo
         timetable_df = filtered_df if (filtered_df is not None and not filtered_df.empty) else df
         timetable = timetable_df.sort_values(
             ["DataCompleta", "Hora_Inicio", "Minuto_Inicio"]
@@ -124,6 +116,6 @@ class SpaceDetailProfile(BaseProfile):
                 "Atividade": st.column_config.TextColumn("Atividade", width="small"),
                 "Docente":   st.column_config.TextColumn("Docente",   width="medium"),
                 "Presenças": st.column_config.NumberColumn("Presenças", width="small"),
-                "Estado":    st.column_config.TextColumn("Estado",    width="small"),
+                "Estado":    st.column_call_config.TextColumn("Estado",    width="small"),
             },
         )

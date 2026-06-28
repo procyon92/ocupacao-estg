@@ -6,7 +6,7 @@ from queries import get_space_detail_data, get_espacos
 from transforms import normalize_dataframe
 from components import render_kpi, render_spacer, render_section_header
 from utils import clamp, pct
-from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG, Omisso
+from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG, Omisso, MESES_PT
 from plots import chart_single_space_heatmap, chart_monthly_calendar
 from calendar_chart import render_timetable_calendar
 from view.tooltips import TAXA_UTILIZACAO, GHOST
@@ -68,8 +68,7 @@ class DetalheEspacoProfile(BaseProfile):
             with c2:
                 cal_month = st.selectbox(
                     "Mês", range(1, 13),
-                    format_func=lambda m: ["Jan","Fev","Mar","Abr","Mai","Jun",
-                                           "Jul","Ago","Set","Out","Nov","Dez"][m-1],
+                    format_func=lambda m: MESES_PT[m],
                     index=0, key="cal_month",
                 )
             st.plotly_chart(chart_monthly_calendar(df, int(cal_year), int(cal_month)),

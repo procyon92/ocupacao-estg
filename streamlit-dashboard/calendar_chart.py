@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
 from plots import chart_calendar_day, chart_calendar_week, chart_calendar_month
-from config import PLOTLY_CONFIG
+from config import PLOTLY_CONFIG, MESES_PT
 
 
 def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
@@ -66,7 +66,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
             sel_month = st.selectbox(
                 "Mês",
                 options=available_months,
-                format_func=lambda p: p.strftime("%B %Y"),
+                format_func=lambda p: f"{MESES_PT[p.month]} {p.year}",
                 key="cal_month_sel"
             )
         fig = chart_calendar_month(df, sel_month.year, sel_month.month)

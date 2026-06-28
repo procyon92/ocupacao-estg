@@ -1,7 +1,9 @@
+from turtle import st
+
 import plotly.graph_objects as go
 import pandas as pd
 import calendar
-from config import COLORS, WEEKDAY_ORDER_FULL, WEEKDAY_PT, WEEKDAY_SHORT, WEEKDAY_SHORT_FULL
+from config import COLORS, WEEKDAY_ORDER_FULL, WEEKDAY_PT, WEEKDAY_SHORT, WEEKDAY_SHORT_FULL, MESES_PT, DIAS_PT
 
 
 def _base_layout(fig: go.Figure, title: str = "", height: int = 380) -> go.Figure:
@@ -335,7 +337,7 @@ def chart_monthly_calendar(df: pd.DataFrame, year: int, month: int) -> go.Figure
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, f"Calendário {calendar.month_name[month]} {year}")
+        return _base_layout(fig, f"Calendário {MESES_PT[month]} {year}")
 
     df = df.copy()
     df["DataCompleta"] = pd.to_datetime(df["DataCompleta"])
@@ -398,7 +400,7 @@ def chart_monthly_calendar(df: pd.DataFrame, year: int, month: int) -> go.Figure
 
     fig.update_layout(
         title=dict(
-            text=f"Calendário de Ocupação — {calendar.month_name[month]} {year}",
+            text=f"Calendário de Ocupação — {MESES_PT[month]} {year}",
             font=dict(size=16, color="#1B2139", family="Inter, sans-serif"),
             x=0.02, y=0.96,
         ),
@@ -522,6 +524,8 @@ def _time_to_hour(hora: int, minuto: int) -> float:
 def _fmt_time(hora: int, minuto: int) -> str:
     return f"{int(hora):02d}:{int(minuto):02d}"
 
+def _fmt_date_pt(date: pd.Timestamp) -> str:
+    return f"{DIAS_PT[date.weekday()]}, {date.day:02d} de {MESES_PT[date.month]} de {date.year}"
 
 def _wrap_text(text: str, max_chars: int = 18) -> str:
     # Trunca texto longo em várias linhas para caber nas células do calendário
@@ -608,7 +612,7 @@ def chart_calendar_day(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
 
     fig.update_xaxes(visible=False, range=[0, 1])
     fig.update_yaxes(range=[y_max, y_min], showgrid=False, showticklabels=False, zeroline=False)
-    fig = _base_calendar_layout(fig, f"📅 {date.strftime('%A, %d de %B de %Y')}", height=700)
+    fig = _base_calendar_layout(fig, f"📅 {_fmt_date_pt(date)}", height=700)
     return fig
 
 
@@ -629,7 +633,6 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
         dot = " 🔵" if not day_df.empty else ""
         fig.add_annotation(
             x=x_center, y=y_max + 0.5,
-            # WEEKDAY_SHORT_FULL para suportar domingo sem IndexError
             text=f"<b>{WEEKDAY_SHORT_FULL[day_ts.weekday()]}</b><br><span style='font-size:12px'>{day_ts.day}</span>{dot}",
             showarrow=False, font=dict(size=12, color="#1B2139"), yref="y", xref="x",
             align="center",
@@ -660,16 +663,24 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
             if t_end <= t_start:
                 t_end = 24.0
 
+            dur_horas = t_end - t_start
+
             color    = color_map.get(row.get("Designacao_UC", ""), "#3B63FB")
             uc_short = str(row.get("Designacao_UC", ""))[:40]
             turno    = str(row.get("Designacao_Turno", ""))
             hora     = f"{_fmt_time(row['Hora_Inicio'], row['Minuto_Inicio'])}–{_fmt_time(row['Hora_Fim'], row['Minuto_Fim'])}"
-            label    = f"{uc_short}<br>{turno} - {hora}"
-            hover    = (f"<b>{row.get('Designacao_UC', '')}</b><br>"
-                        f"Turno: {turno}<br>"
-                        f"{_fmt_time(row['Hora_Inicio'], row['Minuto_Inicio'])} – {_fmt_time(row['Hora_Fim'], row['Minuto_Fim'])}<br>"
-                        f"Docente: {row.get('Docente_Responsavel', 'N/D')}<br>"
-                        f"Sala: {row.get('Nome_Espaco', 'N/D')}")
+
+            # Texto e fonte adaptados à altura disponível do bloco
+            max_chars = 16 if dur_horas < 1.0 else 22 if dur_horas < 1.5 else 30
+            font_size = 10 if dur_horas < 1.0 else 12 if dur_horas < 1.5 else 14
+            uc_wrapped = _wrap_text(uc_short, max_chars)
+            label      = f"{uc_wrapped}<br>{turno} - {hora}"
+
+            hover = (f"<b>{row.get('Designacao_UC', '')}</b><br>"
+                     f"Turno: {turno}<br>"
+                     f"{_fmt_time(row['Hora_Inicio'], row['Minuto_Inicio'])} – {_fmt_time(row['Hora_Fim'], row['Minuto_Fim'])}<br>"
+                     f"Docente: {row.get('Docente_Responsavel', 'N/D')}<br>"
+                     f"Sala: {row.get('Nome_Espaco', 'N/D')}")
 
             x0 = col_i + 0.05
             x1 = col_i + 0.95
@@ -681,7 +692,7 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
                 y=(t_start + t_end) / 2,
                 text=label,
                 showarrow=False,
-                font=dict(size=16, color="white"),
+                font=dict(size=font_size, color="white"),
                 xref="x", yref="y",
                 align="center",
                 xanchor="center", yanchor="middle",
@@ -694,29 +705,31 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
     fig = _base_calendar_layout(fig, title or "📅 Vista Semanal", height=750)
     return fig
 
-
 def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
     import calendar as cal_lib
     color_map = _get_color_map(df)
 
     fig = go.Figure()
     cal_matrix = cal_lib.monthcalendar(year, month)
-    month_name = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho",
-                  "Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][month - 1]
 
     n_weeks = len(cal_matrix)
 
+    # Filtra apenas os dias do mês corrente para calcular a altura correta
+    df_mes = df[
+        (pd.to_datetime(df["DataCompleta"]).dt.year == year) &
+        (pd.to_datetime(df["DataCompleta"]).dt.month == month)
+    ]
+
     # Pré-agrupa sessões por data — evita filtrar o DataFrame inteiro para cada dia
-    daily_groups = df.groupby(df["DataCompleta"].dt.date)
+    daily_groups = df_mes.groupby(df_mes["DataCompleta"].dt.date)
     daily_counts = daily_groups.size().to_dict()
 
-    # Altura dinâmica baseada no dia com mais eventos de todo o mês
+    # Altura dinâmica baseada no dia com mais eventos do mês — célula dimensionada pelo dia mais cheio
     max_events_in_day = max(daily_counts.values(), default=1)
-
-    cell_height_px = 40 + max_events_in_day * 40
-    total_height   = 80 + n_weeks * cell_height_px
-    cell_h         = 1.0 / n_weeks
-    day_names      = WEEKDAY_SHORT  # Seg a Sáb — sem domingo
+    cell_height_px    = 30 + max_events_in_day * 22
+    total_height      = 80 + n_weeks * cell_height_px
+    cell_h            = 1.0 / n_weeks
+    day_names         = WEEKDAY_SHORT  # Seg a Sáb — sem domingo
 
     # Cabeçalho com os nomes dos dias
     for col_i, dname in enumerate(day_names):
@@ -748,30 +761,31 @@ def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
                                showarrow=False, font=dict(size=11, color="#334155"),
                                xref="x", yref="paper", xanchor="left", yanchor="top")
 
-            day_ts   = pd.Timestamp(year=year, month=month, day=day_num).date()
-            day_df   = daily_groups.get_group(day_ts).sort_values("Hora_Inicio") if day_ts in daily_groups.groups else pd.DataFrame()
-            n_events = len(day_df)
+            day_ts = pd.Timestamp(year=year, month=month, day=day_num).date()
+            day_df = daily_groups.get_group(day_ts).sort_values("Hora_Inicio") if day_ts in daily_groups.groups else pd.DataFrame()
 
-            if n_events == 0:
+            if len(day_df) == 0:
                 continue
 
-            header_frac = 0.08
-            padding     = 0.01
-            available   = cell_h - header_frac * cell_h - padding
-            # ev_h consistente com max_events_in_day — garante que nenhum bloco transborda
-            ev_h = available / max(max_events_in_day, 1)
+            header_frac = 0.12
+            padding     = 0.015 
+            gap         = 0.004
+            bottom_pad  = 0.008
+            available   = cell_h - header_frac * cell_h - padding - bottom_pad
+            ev_h        = available / max(max_events_in_day, 1)
 
             for ev_i, (_, row) in enumerate(day_df.iterrows()):
-                color       = color_map.get(row.get("Designacao_UC", ""), "#3B63FB")
-                ev_y_top    = y_top - header_frac * cell_h - padding - ev_i * (ev_h + 0.000)
-                ev_y_bot    = ev_y_top - ev_h
+                color    = color_map.get(row.get("Designacao_UC", ""), "#3B63FB")
+                ev_y_top = y_top - header_frac * cell_h - padding - ev_i * (ev_h + gap)
+                ev_y_bot = ev_y_top - ev_h + gap
+
                 hora        = f"{_fmt_time(row['Hora_Inicio'], row['Minuto_Inicio'])}–{_fmt_time(row['Hora_Fim'], row['Minuto_Fim'])}"
                 uc_short    = str(row.get("Designacao_UC", ""))[:14]
                 turno_short = str(row.get("Designacao_Turno", ""))[:8]
                 label       = f"{hora} {uc_short} {turno_short}"
 
                 fig.add_shape(type="rect",
-                              x0=x0 + 0.04, x1=x1 - 0.04,
+                              x0=x0 + 0.06, x1=x1 - 0.06,
                               y0=ev_y_bot, y1=ev_y_top,
                               fillcolor=color, opacity=0.85,
                               line=dict(color="white", width=0.5), layer="above")
@@ -789,6 +803,6 @@ def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
 
     fig.update_xaxes(range=[0, 6], showgrid=False, showticklabels=False, zeroline=False)
     fig.update_yaxes(range=[0, 1], showgrid=False, showticklabels=False, zeroline=False)
-    fig = _base_calendar_layout(fig, f"📅 {month_name} {year}", height=total_height)
+    fig = _base_calendar_layout(fig, f"📅 {MESES_PT[month]} {year}", height=total_height)
     fig.update_layout(margin=dict(l=10, r=10, t=70, b=10))
     return fig

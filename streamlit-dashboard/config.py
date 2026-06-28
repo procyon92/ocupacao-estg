@@ -73,6 +73,18 @@ WEEKDAY_PT = {
     "Quinta-feira": "Qui", "Sexta-feira": "Sex", "Sábado": "Sáb", "Domingo": "Dom",
 }
 
+# Mapas para usar nos graficos
+MESES_PT = {
+    1: "Janeiro", 2: "Fevereiro", 3: "Março", 4: "Abril",
+    5: "Maio", 6: "Junho", 7: "Julho", 8: "Agosto",
+    9: "Setembro", 10: "Outubro", 11: "Novembro", 12: "Dezembro"
+}
+
+DIAS_PT = {
+    0: "Segunda-feira", 1: "Terça-feira", 2: "Quarta-feira",
+    3: "Quinta-feira", 4: "Sexta-feira", 5: "Sábado", 6: "Domingo"
+}
+
 # Cores
 COLORS = {
     # Cartões KPI

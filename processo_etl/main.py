@@ -28,7 +28,7 @@ def main():
     logger = configurar_logger()
 
     logger.info("=" * 70)
-    logger.info("  ETL PIPELINE v4.0 — Data Warehouse Ocupação ESTG")
+    logger.info("  ETL PIPELINE — Data Warehouse Ocupação ESTG")
     logger.info("  Modelo Dimensional (Star Schema)")
     logger.info("=" * 70)
 

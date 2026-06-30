@@ -15,5 +15,5 @@ __pycache__/
 # Logs
 *.log
 
-AGENTS.md
+# Documentation
 docs/

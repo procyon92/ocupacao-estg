@@ -61,11 +61,6 @@ with nav_cols[0]:
         "Navegação", options=PROFILE_LABELS, default=PROFILE_LABELS[0],
         label_visibility="collapsed", key=SessionKeys.NAV, selection_mode="single",
     )
-with nav_cols[1]:
-    st.markdown(
-        f"<div class='nav-user'>👤 {st.session_state.get('username', '—')}</div>",
-        unsafe_allow_html=True,
-    )
 
 # Anos letivos disponíveis e semestre por defeito com base no mês atual
 _ANOS = get_anos_letivos()

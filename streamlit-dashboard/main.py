@@ -87,7 +87,7 @@ def _sem_index() -> int:
 # Widgets visíveis por página — controla o que aparece na sidebar
 _PROFILE_WIDGETS: dict[str, list[str]] = {
     "Visão Geral":    ["ano_letivo", "semestre", "semana",
-                       "escola", "edificio", "categoria_espaco", "espaco",
+                       "escola", "edificio", "departamento", "categoria_espaco", "espaco",
                        "ciclo_estudo", "epoca", "curso", "uc",
                        "hide_online", "hide_ghost", "hide_concurrent"],
     "Laboratórios":   ["ano_letivo", "semestre", "semana",
@@ -231,8 +231,11 @@ def _render_filters(profile: str) -> dict:
                     "Categoria", [LAB_CATEGORY], disabled=True, key=SessionKeys.CATEGORIA
                 )
             else:
+                edf = vals.get("edificio", Omisso.NO_FILTER)
                 vals["categoria_espaco"] = st.selectbox(
-                    "Categoria", [Omisso.NO_FILTER] + get_categorias(),
+                    "Categoria", [Omisso.NO_FILTER] + get_categorias(
+                        edificio=edf if edf != Omisso.NO_FILTER else None,
+                    ),
                     key=SessionKeys.CATEGORIA,
                 )
         elif wname == "espaco":

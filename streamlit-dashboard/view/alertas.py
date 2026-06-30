@@ -47,6 +47,8 @@ class AlertasProfile(BaseProfile):
             escola=filters.get("escola"),
             edificio=filters.get("edificio"),
             categoria_espaco=filters.get("categoria_espaco"),
+            epoca=filters.get("epoca"),
+            semana_escolar=filters.get("semana"),
         )
 
         if not df_slots.empty:

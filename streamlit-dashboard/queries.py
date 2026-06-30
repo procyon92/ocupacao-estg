@@ -441,6 +441,8 @@ def get_occupancy_by_slot(
     escola: str | None = None,
     edificio: str | None = None,
     categoria_espaco: str | None = None,
+    epoca: str | None = None,
+    semana_escolar: int | None = None,
 ) -> pd.DataFrame:
     conn = get_connection()
     try:
@@ -451,14 +453,17 @@ def get_occupancy_by_slot(
             JOIN Dim_Data d   ON f.SK_Data = d.SK_Data
             JOIN Dim_Hora h1  ON f.SK_Hora_Inicio = h1.SK_Hora
             JOIN Dim_Espaco e ON f.SK_Espaco = e.SK_Espaco
+            JOIN Dim_Epoca ep ON f.SK_Epoca = ep.SK_Epoca
             WHERE 1=1
         """
         params: list = []
-        if ano_letivo:       sql += " AND d.Ano_Escolar = %s";        params.append(ano_letivo)
-        if semestre:         sql += " AND d.Semestre = %s";            params.append(semestre)
-        if escola:           sql += " AND e.Escola_Responsavel = %s";  params.append(escola)
-        if edificio:         sql += " AND e.Edificio = %s";            params.append(edificio)
-        if categoria_espaco: sql += " AND e.Categoria_Espaco = %s";    params.append(categoria_espaco)
+        if ano_letivo:       sql += " AND d.Ano_Escolar = %s";           params.append(ano_letivo)
+        if semestre:         sql += " AND d.Semestre = %s";               params.append(semestre)
+        if escola:           sql += " AND e.Escola_Responsavel = %s";     params.append(escola)
+        if edificio:         sql += " AND e.Edificio = %s";               params.append(edificio)
+        if categoria_espaco: sql += " AND e.Categoria_Espaco = %s";       params.append(categoria_espaco)
+        if epoca:            sql += " AND ep.Descricao_Epoca = %s";       params.append(epoca)
+        if semana_escolar:   sql += " AND d.Numero_Semana_Escolar = %s";  params.append(semana_escolar)
         sql += (
             f" GROUP BY d.DiaSemana, h1.Hora"
             f" ORDER BY {_weekday_order_clause('d.DiaSemana')}, h1.Hora"
@@ -466,7 +471,6 @@ def get_occupancy_by_slot(
         return _safe_read(sql, conn, params)
     finally:
         conn.close()
-
 
 @st.cache_data(ttl=CACHE_TTL_HOT)
 def get_free_rooms_by_interval(
@@ -519,11 +523,26 @@ def get_free_rooms_by_interval(
 # Qualidade do ETL
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_etl_quality_metrics() -> dict[str, int]:
-    # Conta totais e erros numa única query — evita dois round-trips à BD
+def get_etl_quality_metrics(
+    ano_letivo: str | None = None,
+    semestre: int | None = None,
+) -> dict[str, int]:
     conn = get_connection()
     try:
-        sql = """
+        where = "WHERE 1=1"
+        params = []
+        if ano_letivo:
+            where += " AND d.Ano_Escolar = %s"; params.append(ano_letivo)
+        if semestre:
+            where += " AND d.Semestre = %s";    params.append(semestre)
+
+        quality_params = [
+            Omisso.ND, Omisso.ND,
+            Omisso.ND, Omisso.SEM_UNIDADE,
+            Omisso.ND, Omisso.ND, Omisso.ND,
+            Omisso.ND, Omisso.INDEFINIDO,
+        ]
+        sql = f"""
             SELECT
                 COUNT(*) AS total,
                 SUM(CASE
@@ -537,21 +556,14 @@ def get_etl_quality_metrics() -> dict[str, int]:
                     THEN 1 ELSE 0
                 END) AS errors
             FROM Facto_Ocupacao f
+            JOIN Dim_Data d                     ON f.SK_Data              = d.SK_Data
             LEFT JOIN Dim_Espaco e              ON f.SK_Espaco             = e.SK_Espaco
             LEFT JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular
             LEFT JOIN Dim_Curso c               ON f.SK_Curso              = c.SK_Curso
             LEFT JOIN Dim_Responsavel r         ON f.SK_Responsavel        = r.SK_Responsavel
+            {where}
         """
-        params = [
-            Omisso.ND,
-            Omisso.ND,
-            Omisso.ND, Omisso.SEM_UNIDADE,
-            Omisso.ND,
-            Omisso.ND,
-            Omisso.ND,
-            Omisso.ND, Omisso.INDEFINIDO,
-        ]
-        df = _safe_read(sql, conn, params)
+        df = _safe_read(sql, conn, quality_params + params)
         if df.empty:
             return {"total": 0, "valid": 0, "errors": 0}
         total  = int(df.iloc[0]["total"])
@@ -565,31 +577,43 @@ def get_etl_quality_metrics() -> dict[str, int]:
         conn.close()
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_unmapped_records_count() -> dict[str, int]:
+def get_unmapped_records_count(
+    ano_letivo: str | None = None,
+    semestre: int | None = None,
+) -> dict[str, int]:
     conn = get_connection()
-    # Cada entrada é (sql, params) — corre tudo com o mesmo cursor para eficiência
+
+    period_join  = "JOIN Dim_Data d ON f.SK_Data = d.SK_Data"
+    period_where = ""
+    period_params: list = []
+    if ano_letivo:
+        period_where += " AND d.Ano_Escolar = %s"; period_params.append(ano_letivo)
+    if semestre:
+        period_where += " AND d.Semestre = %s";    period_params.append(semestre)
+
     _queries = {
         "UC Sem Mapeamento": (
-            "SELECT COUNT(*) FROM Facto_Ocupacao f "
-            "JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular "
-            "WHERE uc.Designacao_UC IN (%s, %s)",
-            [Omisso.ND, Omisso.SEM_UNIDADE],
+            f"SELECT COUNT(*) FROM Facto_Ocupacao f {period_join} "
+            f"JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular "
+            f"WHERE uc.Designacao_UC IN (%s, %s){period_where}",
+            [Omisso.ND, Omisso.SEM_UNIDADE] + period_params,
         ),
         "Curso Sem Mapeamento": (
-            "SELECT COUNT(*) FROM Facto_Ocupacao f "
-            "JOIN Dim_Curso c ON f.SK_Curso = c.SK_Curso "
-            "WHERE c.Nome_Curso = %s OR c.Codigo_Curso = %s",
-            [Omisso.ND, Omisso.ND],
+            f"SELECT COUNT(*) FROM Facto_Ocupacao f {period_join} "
+            f"JOIN Dim_Curso c ON f.SK_Curso = c.SK_Curso "
+            f"WHERE c.Nome_Curso = %s OR c.Codigo_Curso = %s{period_where}",
+            [Omisso.ND, Omisso.ND] + period_params,
         ),
         "Responsável Indefinido": (
-            "SELECT COUNT(*) FROM Facto_Ocupacao f "
-            "JOIN Dim_Responsavel r ON f.SK_Responsavel = r.SK_Responsavel "
-            "WHERE r.Docente_Responsavel IN (%s, %s)",
-            [Omisso.ND, Omisso.INDEFINIDO],
+            f"SELECT COUNT(*) FROM Facto_Ocupacao f {period_join} "
+            f"JOIN Dim_Responsavel r ON f.SK_Responsavel = r.SK_Responsavel "
+            f"WHERE r.Docente_Responsavel IN (%s, %s){period_where}",
+            [Omisso.ND, Omisso.INDEFINIDO] + period_params,
         ),
         "Ghost Sessions (0 Presenças)": (
-            "SELECT COUNT(*) FROM Facto_Ocupacao WHERE Numero_Presencas = 0",
-            [],
+            f"SELECT COUNT(*) FROM Facto_Ocupacao f {period_join} "
+            f"WHERE f.Numero_Presencas = 0{period_where}",
+            period_params,
         ),
     }
     result: dict[str, int] = {}
@@ -604,7 +628,6 @@ def get_unmapped_records_count() -> dict[str, int]:
     finally:
         conn.close()
     return result
-
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_ghost_sessions_trend(
@@ -635,8 +658,11 @@ def get_ghost_sessions_trend(
 
 
 @st.cache_data(ttl=CACHE_TTL_HOT)
-def get_raw_anomalies(limit: int = 100) -> pd.DataFrame:
-    # LIMIT via %s — nunca interpolar diretamente na string SQL
+def get_raw_anomalies(
+    limit: int = 100,
+    ano_letivo: str | None = None,
+    semestre: int | None = None,
+) -> pd.DataFrame:
     conn = get_connection()
     try:
         sql = """
@@ -663,24 +689,27 @@ def get_raw_anomalies(limit: int = 100) -> pd.DataFrame:
             JOIN Dim_Curso c               ON f.SK_Curso               = c.SK_Curso
             JOIN Dim_Responsavel r         ON f.SK_Responsavel         = r.SK_Responsavel
             JOIN Dim_Tipo_Atividade ta     ON f.SK_Tipo_Atividade      = ta.SK_Tipo_Atividade
-            WHERE f.Numero_Presencas = 0
-               OR uc.Designacao_UC IN (%s, %s)
-               OR c.Nome_Curso = %s
-               OR r.Docente_Responsavel IN (%s, %s)
-            ORDER BY d.DataCompleta DESC
-            LIMIT %s
+            WHERE (
+                f.Numero_Presencas = 0
+                OR uc.Designacao_UC IN (%s, %s)
+                OR c.Nome_Curso = %s
+                OR r.Docente_Responsavel IN (%s, %s)
+            )
         """
         params = [
-            # params dos CASE
             Omisso.ND, Omisso.SEM_UNIDADE,
             Omisso.ND,
             Omisso.ND, Omisso.INDEFINIDO,
-            # params do WHERE
             Omisso.ND, Omisso.SEM_UNIDADE,
             Omisso.ND,
             Omisso.ND, Omisso.INDEFINIDO,
-            int(limit),
         ]
+        if ano_letivo:
+            sql += " AND d.Ano_Escolar = %s"; params.append(ano_letivo)
+        if semestre:
+            sql += " AND d.Semestre = %s";    params.append(semestre)
+        sql += " ORDER BY d.DataCompleta DESC LIMIT %s"
+        params.append(int(limit))
         return _safe_read(sql, conn, params)
     finally:
         conn.close()

@@ -17,12 +17,21 @@ class QualidadeProfile(BaseProfile):
     def render(self, filters: Filters) -> None:
         self._h2("Qualidade dos Dados / ETL")
 
-        metrics     = get_etl_quality_metrics()
-        ghost_trend = get_ghost_sessions_trend(
-            ano_escolar=filters.get("ano_letivo"),
-            semestre=filters.get("semestre"),
+        ano_letivo = filters.get("ano_letivo")
+        semestre   = filters.get("semestre")
+
+        metrics     = get_etl_quality_metrics(
+            ano_letivo=ano_letivo,
+            semestre=semestre,
         )
-        unmapped    = get_unmapped_records_count()
+        ghost_trend = get_ghost_sessions_trend(
+            ano_escolar=ano_letivo,
+            semestre=semestre,
+        )
+        unmapped    = get_unmapped_records_count(
+            ano_letivo=ano_letivo,
+            semestre=semestre,
+        )
         total_ghost = unmapped.get("Ghost Sessions (0 Presenças)", 0)
         total_uc    = unmapped.get("UC Sem Mapeamento", 0)
         total_curso = unmapped.get("Curso Sem Mapeamento", 0)
@@ -40,13 +49,13 @@ class QualidadeProfile(BaseProfile):
         render_spacer(1.2)
         render_section_header("Evolução de Anomalias")
         st.plotly_chart(chart_anomalies_trend(ghost_trend),
-                        use_container_width=True, key="chart_ghost_trend", config= PLOTLY_CONFIG)
+                        use_container_width=True, key="chart_ghost_trend", config=PLOTLY_CONFIG)
 
         render_spacer()
         # Carrega os dados para calcular a cobertura das dimensões
         df = normalize_dataframe(get_filtered_data(
-            ano_letivo=filters.get("ano_letivo"),
-            semestre=filters.get("semestre"),
+            ano_letivo=ano_letivo,
+            semestre=semestre,
         ))
         if not df.empty:
             render_section_header("Cobertura de Chaves Dimensionais")
@@ -59,7 +68,11 @@ class QualidadeProfile(BaseProfile):
             "UC sem mapeamento, curso N/D ou responsável indefinido."
         )
 
-        anomalies_df = normalize_dataframe(get_raw_anomalies(limit=100))
+        anomalies_df = normalize_dataframe(get_raw_anomalies(
+            limit=100,
+            ano_letivo=ano_letivo,
+            semestre=semestre,
+        ))
         if anomalies_df.empty:
             st.success("Nenhuma anomalia encontrada nos registos atuais.")
             return

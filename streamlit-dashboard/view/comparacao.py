@@ -19,6 +19,7 @@ class ComparacaoProfile(BaseProfile):
         all_rooms = get_espacos(
             edificio=filters.get("edificio"),
             categoria=filters.get("categoria_espaco"),
+            departamento=filters.get("departamento"),
         )
         selected_rooms = st.multiselect(
             "Salas para comparar", options=all_rooms, default=[],
@@ -38,6 +39,7 @@ class ComparacaoProfile(BaseProfile):
                             space_name=room,
                             ano_escolar=filters.get("ano_letivo"),
                             semestre=filters.get("semestre"),
+                            semana_escolar=filters.get("semana"),
                         )
                     ),
                     hide_online=filters.get("hide_online", False),

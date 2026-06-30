@@ -28,6 +28,7 @@ class GeralProfile(BaseProfile):
             escola=filters.get("escola"),
             edificio=filters.get("edificio"),
             categoria_espaco=filters.get("categoria_espaco"),
+            departamento=filters.get("departamento")
         )
 
         # KPIs

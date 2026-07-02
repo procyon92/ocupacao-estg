@@ -110,9 +110,9 @@ class DataTransformer:
         def _tipo_dia(row):
             if row['DiaSemana'] in ['Sábado', 'Domingo']:
                 return 'Fim de Semana'
-            if row['Mes'] == 8:
-                return 'Férias'
-            return 'Dia Útil/Letivo'
+            if row['Numero_Semana_Escolar'] > 0:
+                return 'Dia Útil/Letivo'
+            return 'Férias'
 
         df['Tipo_Dia'] = df.apply(_tipo_dia, axis=1)
 

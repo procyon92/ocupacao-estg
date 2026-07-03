@@ -1,9 +1,17 @@
+import os
 import logging
 import sys
 from dotenv import load_dotenv
 from datetime import datetime
 
 load_dotenv()
+
+# Nomes dos ficheiros de origem — configuráveis via .env.
+DADOS_PATH          = os.getenv("DADOS_PATH")
+FILE_AGENDAMENTOS   = os.getenv("FILE_AGENDAMENTOS")
+FILE_PRESENCAS      = os.getenv("FILE_PRESENCAS")
+FILE_CURSOS         = os.getenv("FILE_CURSOS")
+FILE_TURNOS_SQL     = os.getenv("FILE_TURNOS_SQL")
 
 
 def configurar_logger():
@@ -36,11 +44,16 @@ def main():
     logger.info("--- FASE 1: EXTRAÇÃO ---")
     from extract import DataExtractor
 
-    extractor = DataExtractor(base_path="Dados")
+    extractor = DataExtractor(base_path=DADOS_PATH)
 
-    df_agendamentos = extractor.extract_csv("PorSalaTurno.csv",       sep=",",  encoding="cp1252")
-    df_presencas    = extractor.extract_csv("PorTurnoPresencas.csv",  sep=",",  encoding="cp1252")
-    df_cursos       = extractor.extract_csv("curso_ucs(in).csv",      sep=";",  encoding="latin-1")
+    logger.info(
+        f"Ficheiros de origem: agendamentos={FILE_AGENDAMENTOS} | "
+        f"presencas={FILE_PRESENCAS} | cursos={FILE_CURSOS} | turnos_sql={FILE_TURNOS_SQL}"
+    )
+
+    df_agendamentos = extractor.extract_csv(FILE_AGENDAMENTOS, sep=",", encoding="cp1252")
+    df_presencas    = extractor.extract_csv(FILE_PRESENCAS,    sep=",", encoding="cp1252")
+    df_cursos       = extractor.extract_csv(FILE_CURSOS,       sep=";", encoding="latin-1")
 
     # Extrai os turnos do dump SQL — as colunas esperadas têm de corresponder exatamente ao schema
     nome_tabela_alvo = "turnos"
@@ -50,7 +63,7 @@ def main():
         "ciclo", "descricao", "estado", "pessoa_resp"
     ]
     df_stg = extractor.extract_sql_dump(
-        filename="script_espacos_salas_turnos.sql",
+        filename=FILE_TURNOS_SQL,
         table_name=nome_tabela_alvo,
         expected_columns=colunas_esperadas_stg
     )

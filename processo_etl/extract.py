@@ -16,7 +16,7 @@ class DataExtractor:
         self.logger = logging.getLogger(__name__)
 
     @staticmethod
-    def _normalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    def _normalizar_colunas(df: pd.DataFrame) -> pd.DataFrame:
         # Converte todos os nomes de colunas para snake_case limpo
         df.columns = (
             df.columns
@@ -57,7 +57,7 @@ class DataExtractor:
         try:
             self.logger.info(f"A extrair dados brutos (Raw) de: {filename}")
             df = pd.read_csv(file_path, sep=sep, encoding=encoding, low_memory=False, dtype=str, **kwargs)
-            df = self._normalize_columns(df)
+            df = self._normalizar_colunas(df)
             df = self._sanitize_strings(df)
             self.logger.info(f"[{filename}] Extração concluída: {df.shape[0]:,} linhas.")
             return df
@@ -106,7 +106,7 @@ class DataExtractor:
                             self.logger.warning(f"Desalinhamento de schema ignorado na tabela {table_name}.")
 
             df = pd.DataFrame(data, columns=expected_columns)
-            df = self._normalize_columns(df)
+            df = self._normalizar_colunas(df)
             df = self._sanitize_strings(df)
             self.logger.info(f"[SQL Staging] Parsing concluído: {len(df):,} registos.")
             return df

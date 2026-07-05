@@ -26,7 +26,7 @@ class DataLoader:
 
     # Dummy Records (SK=0)
 
-    def ensure_dummy_dimension_records(self):
+    def ensure_registos_dimensao_dummy(self):
         # Garante que existe o registo SK=0 em todas as dimensões — usado quando um facto não tem dimensão conhecida
         self.logger.info("A inserir/validar Dummies (SK=0)...")
         queries = [
@@ -50,7 +50,7 @@ class DataLoader:
 
     # Dimensões com PK fixa (Data, Hora)
 
-    def load_fixed_pk_dimension(self, df_dim: pd.DataFrame, table_name: str, sk_name: str):
+    def load_dimensao_pk_fixa(self, df_dim: pd.DataFrame, table_name: str, sk_name: str):
         # Para dimensões onde a PK não é AUTO_INCREMENT — insere só os SKs que ainda não existem
         with self.engine.begin() as conn:
             existing_sks = set(
@@ -68,7 +68,7 @@ class DataLoader:
 
     # Dimensões dinâmicas — SCD Tipo 1
 
-    def load_dimension_scd1(self, df: pd.DataFrame, table_name: str, natural_keys: List[str], sk_name: str) -> pd.DataFrame:
+    def load_dimensao_scd1(self, df: pd.DataFrame, table_name: str, natural_keys: List[str], sk_name: str) -> pd.DataFrame:
         # SCD1 — sem histórico: se o registo já existe, não faz nada; se é novo, insere
         nk_valid = [k for k in natural_keys if k in df.columns]
         if not nk_valid:
@@ -120,7 +120,7 @@ class DataLoader:
 
     # Dimensões dinâmicas — SCD Tipo 2
 
-    def load_dimension_scd2(self, df: pd.DataFrame, table_name: str, natural_keys: List[str], sk_name: str) -> pd.DataFrame:
+    def load_dimensao_scd2(self, df: pd.DataFrame, table_name: str, natural_keys: List[str], sk_name: str) -> pd.DataFrame:
         # SCD2 — com histórico: registo alterado é expirado (Valid_To, Is_Active=0) e inserido novo
         nk_valid = [k for k in natural_keys if k in df.columns]
         if not nk_valid:
@@ -259,7 +259,7 @@ class DataLoader:
 
     # Métricas de qualidade
 
-    def print_quality_metrics(self, df: pd.DataFrame):
+    def print_metricas_qualidade(self, df: pd.DataFrame):
         # Mostra a percentagem de factos com SK válida (>0) para cada dimensão
         sk_columns = [c for c in df.columns if c.startswith('SK_')]
         if not sk_columns:

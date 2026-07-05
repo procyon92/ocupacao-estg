@@ -27,12 +27,12 @@ st_mock.cache_data = lambda **kwargs: (lambda f: f)
 sys.modules['streamlit'] = st_mock
 
 from queries import (
-    get_filtered_data,
-    get_filtered_rooms_count,
-    get_etl_quality_metrics,
-    get_space_detail_data,
-    get_occupancy_by_slot,
-    get_ghost_sessions_trend,
+    get_dados_filtrados,
+    get_contagem_salas_filtradas,
+    get_metricas_qualidade_etl,
+    get_dados_detalhe_espaco,
+    get_ocupacao_por_horario,
+    get_tendencia_sessoes_fantasma,
 )
 
 
@@ -53,7 +53,7 @@ TEST_DB_PYMYSQL = {
 
 
 def get_test_connection():
-    # Devolve uma ligação pymysql com autocommit — compatível com o _safe_read do queries.py
+    # Devolve uma ligação pymysql com autocommit — compatível com o _leitura_segura do queries.py
     return pymysql.connect(**TEST_DB_PYMYSQL)
 
 
@@ -138,43 +138,43 @@ def insert_minimal_fact(
     _test_engine.dispose()
 
 
-# get_filtered_data
+# get_dados_filtrados
 
 class TestGetFilteredData:
 
     def test_devolve_dataframe(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data()
+            df = get_dados_filtrados()
         assert isinstance(df, pd.DataFrame)
 
     def test_sem_dados_devolve_dataframe_vazio(self):
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data()
+            df = get_dados_filtrados()
         assert df.empty
 
     def test_filtra_por_ano_letivo(self):
         insert_minimal_fact(id_ocupacao="T1", ano_escolar="2024/2025")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data(ano_letivo="2024/2025")
+            df = get_dados_filtrados(ano_letivo="2024/2025")
         assert len(df) == 1
 
     def test_filtra_por_ano_letivo_errado_devolve_vazio(self):
         insert_minimal_fact(id_ocupacao="T1", ano_escolar="2024/2025")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data(ano_letivo="2023/2024")
+            df = get_dados_filtrados(ano_letivo="2023/2024")
         assert df.empty
 
     def test_filtra_por_semestre(self):
         insert_minimal_fact(id_ocupacao="T1", semestre=1)
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data(semestre=1)
+            df = get_dados_filtrados(semestre=1)
         assert len(df) == 1
 
     def test_colunas_obrigatorias(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data()
+            df = get_dados_filtrados()
         for col in ['ID_Ocupacao', 'Edificio', 'Nome_Espaco', 'Categoria_Espaco',
                     'Hora_Inicio', 'Hora_Fim', 'Duracao_Minutos', 'Numero_Presencas',
                     'Designacao_UC', 'Periodo_Dia']:
@@ -183,151 +183,151 @@ class TestGetFilteredData:
     def test_periodo_dia_manha(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_filtered_data()
+            df = get_dados_filtrados()
         assert len(df) > 0
         assert df['Periodo_Dia'].iloc[0] == 'Manhã'
 
 
-# get_filtered_rooms_count
+# get_contagem_salas_filtradas
 
 class TestGetFilteredRoomsCount:
 
     def test_conta_sala(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            count = get_filtered_rooms_count()
+            count = get_contagem_salas_filtradas()
         assert count == 1
 
     def test_sem_dados_devolve_zero(self):
         with patch('queries.get_connection', side_effect=get_test_connection):
-            count = get_filtered_rooms_count()
+            count = get_contagem_salas_filtradas()
         assert count == 0
 
     def test_filtra_por_edificio(self):
         insert_minimal_fact(edificio="ED. A")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            count = get_filtered_rooms_count(edificio="ED. A")
+            count = get_contagem_salas_filtradas(edificio="ED. A")
         assert count == 1
 
     def test_edificio_errado_devolve_zero(self):
         insert_minimal_fact(edificio="ED. A")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            count = get_filtered_rooms_count(edificio="ED. B")
+            count = get_contagem_salas_filtradas(edificio="ED. B")
         assert count == 0
 
     def test_filtra_por_categoria(self):
         insert_minimal_fact(categoria="Laboratorio")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            count = get_filtered_rooms_count(categoria_espaco="Laboratorio")
+            count = get_contagem_salas_filtradas(categoria_espaco="Laboratorio")
         assert count == 1
 
 
-# get_etl_quality_metrics
+# get_metricas_qualidade_etl
 
 class TestGetEtlQualityMetrics:
 
     def test_devolve_dict_com_chaves(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            result = get_etl_quality_metrics()
+            result = get_metricas_qualidade_etl()
         assert set(result.keys()) == {'total', 'valid', 'errors'}
 
     def test_total_correto(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            result = get_etl_quality_metrics()
+            result = get_metricas_qualidade_etl()
         assert result['total'] == 1
 
     def test_valid_mais_errors_igual_total(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            result = get_etl_quality_metrics()
+            result = get_metricas_qualidade_etl()
         assert result['valid'] + result['errors'] == result['total']
 
     def test_sem_dados_devolve_zeros(self):
         with patch('queries.get_connection', side_effect=get_test_connection):
-            result = get_etl_quality_metrics()
+            result = get_metricas_qualidade_etl()
         assert result == {'total': 0, 'valid': 0, 'errors': 0}
 
 
-# get_ghost_sessions_trend
+# get_tendencia_sessoes_fantasma
 
 class TestGetGhostSessionsTrend:
 
     def test_ghost_session_detetada(self):
         insert_minimal_fact(presencas=0)
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_ghost_sessions_trend()
+            df = get_tendencia_sessoes_fantasma()
         assert len(df) == 1
         assert df['Ghost_Count'].iloc[0] == 1
 
     def test_sem_ghost_devolve_vazio(self):
         insert_minimal_fact(presencas=15)
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_ghost_sessions_trend()
+            df = get_tendencia_sessoes_fantasma()
         assert df.empty
 
     def test_coluna_periodo_criada(self):
         insert_minimal_fact(presencas=0)
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_ghost_sessions_trend()
+            df = get_tendencia_sessoes_fantasma()
         assert 'Periodo' in df.columns
 
     def test_filtra_por_ano_escolar(self):
         insert_minimal_fact(presencas=0, ano_escolar="2024/2025")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_ghost_sessions_trend(ano_escolar="2024/2025")
+            df = get_tendencia_sessoes_fantasma(ano_escolar="2024/2025")
         assert len(df) == 1
 
     def test_ano_escolar_errado_devolve_vazio(self):
         insert_minimal_fact(presencas=0, ano_escolar="2024/2025")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_ghost_sessions_trend(ano_escolar="2023/2024")
+            df = get_tendencia_sessoes_fantasma(ano_escolar="2023/2024")
         assert df.empty
 
 
-# get_space_detail_data
+# get_dados_detalhe_espaco
 
 class TestGetSpaceDetailData:
 
     def test_devolve_dados_para_espaco(self):
         insert_minimal_fact(espaco="SALA A")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_space_detail_data("SALA A")
+            df = get_dados_detalhe_espaco("SALA A")
         assert len(df) == 1
 
     def test_espaco_errado_devolve_vazio(self):
         insert_minimal_fact(espaco="SALA A")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_space_detail_data("SALA B")
+            df = get_dados_detalhe_espaco("SALA B")
         assert df.empty
 
     def test_ordenado_por_data_hora(self):
         insert_minimal_fact(espaco="SALA A")
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_space_detail_data("SALA A")
+            df = get_dados_detalhe_espaco("SALA A")
         assert 'DataCompleta' in df.columns
 
 
-# get_occupancy_by_slot
+# get_ocupacao_por_horario
 
 class TestGetOccupancyBySlot:
 
     def test_devolve_slot(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_occupancy_by_slot()
+            df = get_ocupacao_por_horario()
         assert len(df) >= 1
 
     def test_colunas_presentes(self):
         insert_minimal_fact()
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_occupancy_by_slot()
+            df = get_ocupacao_por_horario()
         assert 'DiaSemana' in df.columns
         assert 'Hora_Inicio' in df.columns
         assert 'Salas_Ocupadas' in df.columns
 
     def test_sem_dados_devolve_vazio(self):
         with patch('queries.get_connection', side_effect=get_test_connection):
-            df = get_occupancy_by_slot()
+            df = get_ocupacao_por_horario()
         assert df.empty

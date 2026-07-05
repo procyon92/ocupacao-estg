@@ -3,7 +3,7 @@ from datetime import datetime
 import streamlit as st
 from models import Filters
 from view.base import BaseProfile
-from queries import get_free_rooms_by_interval, get_filtered_rooms_count
+from queries import get_salas_livres_por_intervalo, get_contagem_salas_filtradas
 from components import render_kpi, render_spacer
 from utils import pct
 
@@ -38,13 +38,13 @@ class EspacosVaziosProfile(BaseProfile):
         edi = filters.get("edificio")
         cat = filters.get("categoria_espaco")
 
-        df_free = get_free_rooms_by_interval(
+        df_free = get_salas_livres_por_intervalo(
             data_pesquisa=str(search_date),
             hora_inicio=search_hour_ini,
             hora_fim=search_hour_fim,
             escola=esc, departamento=dep, edificio=edi, categoria_espaco=cat,
         )
-        total_rooms = get_filtered_rooms_count(
+        total_rooms = get_contagem_salas_filtradas(
             escola=esc, edificio=edi, categoria_espaco=cat, departamento=dep
         )
 

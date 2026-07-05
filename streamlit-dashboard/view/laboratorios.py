@@ -3,14 +3,14 @@ import streamlit as st
 import pandas as pd
 from models import Filters
 from view.base import BaseProfile
-from view._helpers import load_and_prepare
-from queries import get_filtered_rooms_count, get_departamentos
-from transforms import build_heatmap_data, apply_post_filters
-from components import render_kpi, render_spacer, render_section_header
-from utils import fmt_duration_long
+from view._helpers import load_e_preparar
+from queries import get_contagem_salas_filtradas, get_departamentos
+from transforms import build_dados_heatmap, apply_filtros_post
+from components import render_kpi, render_spacer, render_cabecalho_seccao
+from utils import fmt_duracao_long
 from config import LAB_CATEGORY, PLOTLY_CONFIG, Omisso
 from plots import (
-    chart_heatmap_ocupacao, chart_period_of_day,
+    chart_heatmap_ocupacao, chart_periodo_dia,
     chart_tipo_atividade, chart_top_espacos, chart_bottom_espacos,
 )
 from view.tooltips import GHOST
@@ -43,8 +43,8 @@ class LaboratoriosProfile(BaseProfile):
         else:
             lab_filters.pop("departamento", None)
 
-        df = load_and_prepare(lab_filters)
-        df = apply_post_filters(
+        df = load_e_preparar(lab_filters)
+        df = apply_filtros_post(
             df,
             hide_online=filters.get("hide_online", False),
             hide_concurrent=filters.get("hide_concurrent", False),
@@ -59,7 +59,7 @@ class LaboratoriosProfile(BaseProfile):
         avg_pres    = round(total_pres / max(total_ocup, 1), 1)
         ghost_count = int((df["Numero_Presencas"] == 0).sum())
 
-        total_labs  = get_filtered_rooms_count(
+        total_labs  = get_contagem_salas_filtradas(
             escola=lab_filters.get("escola"),
             edificio=lab_filters.get("edificio"),
             categoria_espaco=LAB_CATEGORY,
@@ -77,10 +77,10 @@ class LaboratoriosProfile(BaseProfile):
         render_spacer(1.2)
         col_heat, col_period = st.columns([2, 1])
         with col_heat:
-            st.plotly_chart(chart_heatmap_ocupacao(build_heatmap_data(df)),
+            st.plotly_chart(chart_heatmap_ocupacao(build_dados_heatmap(df)),
                             use_container_width=True, key="lab_chart_heat", config= PLOTLY_CONFIG)
         with col_period:
-            st.plotly_chart(chart_period_of_day(df), use_container_width=True, key="lab_chart_period", config= PLOTLY_CONFIG)
+            st.plotly_chart(chart_periodo_dia(df), use_container_width=True, key="lab_chart_period", config= PLOTLY_CONFIG)
 
         render_spacer()
         top_n = st.slider("Top / Bottom N Laboratórios", 5, 30, 10, key="lab_top_n")
@@ -93,7 +93,7 @@ class LaboratoriosProfile(BaseProfile):
             st.plotly_chart(chart_bottom_espacos(df, top_n), use_container_width=True, key="lab_chart_bottom", config= PLOTLY_CONFIG)
 
         render_spacer()
-        render_section_header("Gestão de Capacidade — Laboratórios")
+        render_cabecalho_seccao("Gestão de Capacidade — Laboratórios")
         # Agrega por laboratório — classifica carga com base nos quartis Q50 e Q75
         summary = (
             df.groupby(["Edificio", "Nome_Espaco"])
@@ -110,7 +110,7 @@ class LaboratoriosProfile(BaseProfile):
         q50 = summary["Sessoes"].quantile(0.50)
         summary["Horas_Total"]     = (summary["Horas_Total"] / 60).round(0).astype(int)
         summary["Media_Presencas"] = summary["Media_Presencas"].round(1)
-        summary["Media_Horas"]     = summary["Media_Horas"].apply(fmt_duration_long)
+        summary["Media_Horas"]     = summary["Media_Horas"].apply(fmt_duracao_long)
         summary["Carga"] = summary["Sessoes"].apply(
             lambda x: "🔴 Alta" if x > q75 else "🟡 Média" if x > q50 else "🟢 Baixa"
         )

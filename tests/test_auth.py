@@ -2,10 +2,10 @@
 test_auth.py — Testes unitários para o módulo auth.py do dashboard.
 
 Cobre:
-  - check_auth  : verifica se a sessão está autenticada
-  - logout      : limpa a sessão e regressa ao login
+  - check_autenticacao  : verifica se a sessão está autenticada
+  - terminar_sessao      : limpa a sessão e regressa ao login
 
-O login_page não é testado diretamente — envolve st.form, st.columns
+O pagina_login não é testado diretamente — envolve st.form, st.columns
 e st.rerun() que são difíceis de simular sem o runtime do Streamlit.
 
 Executar com:
@@ -27,62 +27,62 @@ sys.modules['streamlit'] = st_mock
 import auth
 
 
-# check_auth
+# check_autenticacao
 
 class TestCheckAuth:
 
     def test_nao_autenticado_por_defeito(self):
         # session_state vazio — não está autenticado
         st_mock.session_state = {}
-        assert auth.check_auth() is False
+        assert auth.check_autenticacao() is False
 
     def test_autenticado_quando_flag_true(self):
         st_mock.session_state = {"authenticated": True}
-        assert auth.check_auth() is True
+        assert auth.check_autenticacao() is True
 
     def test_nao_autenticado_quando_flag_false(self):
         st_mock.session_state = {"authenticated": False}
-        assert auth.check_auth() is False
+        assert auth.check_autenticacao() is False
 
     def test_nao_autenticado_quando_flag_ausente(self):
         st_mock.session_state = {"username": "admin"}
-        assert auth.check_auth() is False
+        assert auth.check_autenticacao() is False
 
 
-# logout
+# terminar_sessao
 
-class TestLogout:
+class Testterminar_sessao:
 
-    def test_logout_coloca_authenticated_false(self):
+    def test_terminar_sessao_coloca_authenticated_false(self):
         st_mock.session_state = {"authenticated": True, "username": "admin"}
         try:
-            auth.logout()
+            auth.terminar_sessao()
         except Exception:
             pass  # st.rerun() levanta exceção no mock — é esperado
         assert st_mock.session_state.get("authenticated") is False
 
-    def test_logout_remove_username(self):
+    def test_terminar_sessao_remove_username(self):
         st_mock.session_state = {"authenticated": True, "username": "admin"}
         try:
-            auth.logout()
+            auth.terminar_sessao()
         except Exception:
             pass
         assert "username" not in st_mock.session_state
 
-    def test_logout_chama_rerun(self):
+    def test_terminar_sessao_chama_rerun(self):
         st_mock.session_state = {"authenticated": True, "username": "admin"}
         st_mock.rerun.reset_mock()
         try:
-            auth.logout()
+            auth.terminar_sessao()
         except Exception:
             pass
         st_mock.rerun.assert_called_once()
 
-    def test_logout_sem_username_nao_falha(self):
-        # Logout sem username na sessão não deve lançar erro
+    def test_terminar_sessao_sem_username_nao_falha(self):
+        # terminar_sessao sem username na sessão não deve lançar erro
         st_mock.session_state = {"authenticated": True}
         try:
-            auth.logout()
+            auth.terminar_sessao()
         except Exception:
             pass
         assert st_mock.session_state.get("authenticated") is False

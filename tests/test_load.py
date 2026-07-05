@@ -6,11 +6,11 @@ A BD de teste deve existir e ter o mesmo schema que dw_ocupacao.
 
 Cobre:
   - prepare_fact_payload    : preparação e validação do payload de factos
-  - load_fixed_pk_dimension : inserção de dimensões com PK fixa
-  - load_dimension_scd1     : inserção e lookup SCD tipo 1
-  - load_dimension_scd2     : inserção, expiração e lookup SCD tipo 2
+  - load_dimensao_pk_fixa : inserção de dimensões com PK fixa
+  - load_dimensao_scd1     : inserção e lookup SCD tipo 1
+  - load_dimensao_scd2     : inserção, expiração e lookup SCD tipo 2
   - load_fact               : inserção de factos repetidos
-  - ensure_dummy_dimension_records : inserção dos registos SK=0
+  - ensure_registos_dimensao_dummy : inserção dos registos SK=0
 
 Executar com:
     pytest tests/test_load.py -v
@@ -129,7 +129,7 @@ class TestPrepareFactPayload:
         assert len(result) == 3
 
 
-# load_fixed_pk_dimension
+# load_dimensao_pk_fixa
 
 class TestLoadFixedPkDimension:
 
@@ -139,7 +139,7 @@ class TestLoadFixedPkDimension:
             'Hora':    [1, 2],
             'Minuto':  [0, 0],
         })
-        loader.load_fixed_pk_dimension(df, 'Dim_Hora', 'SK_Hora')
+        loader.load_dimensao_pk_fixa(df, 'Dim_Hora', 'SK_Hora')
         assert count_rows('Dim_Hora') == 2
 
     def test_nao_duplica_registos_existentes(self, loader):
@@ -148,56 +148,56 @@ class TestLoadFixedPkDimension:
             'Hora':    [1],
             'Minuto':  [0],
         })
-        loader.load_fixed_pk_dimension(df, 'Dim_Hora', 'SK_Hora')
-        loader.load_fixed_pk_dimension(df, 'Dim_Hora', 'SK_Hora')
+        loader.load_dimensao_pk_fixa(df, 'Dim_Hora', 'SK_Hora')
+        loader.load_dimensao_pk_fixa(df, 'Dim_Hora', 'SK_Hora')
         assert count_rows('Dim_Hora') == 1
 
     def test_insere_apenas_novos(self, loader):
         df1 = pd.DataFrame({'SK_Hora': [100], 'Hora': [1], 'Minuto': [0]})
         df2 = pd.DataFrame({'SK_Hora': [100, 200], 'Hora': [1, 2], 'Minuto': [0, 0]})
-        loader.load_fixed_pk_dimension(df1, 'Dim_Hora', 'SK_Hora')
-        loader.load_fixed_pk_dimension(df2, 'Dim_Hora', 'SK_Hora')
+        loader.load_dimensao_pk_fixa(df1, 'Dim_Hora', 'SK_Hora')
+        loader.load_dimensao_pk_fixa(df2, 'Dim_Hora', 'SK_Hora')
         assert count_rows('Dim_Hora') == 2
 
 
-# load_dimension_scd1
+# load_dimensao_scd1
 
 class TestLoadDimensionScd1:
 
     def test_insere_registo_novo(self, loader):
         df = pd.DataFrame({'Designacao_Turno': ['TP1'], 'outro': ['x']})
-        loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
         assert count_rows('Dim_Turno') == 1
 
     def test_nao_duplica_registo_existente(self, loader):
         df = pd.DataFrame({'Designacao_Turno': ['TP1']})
-        loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
-        loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
         assert count_rows('Dim_Turno') == 1
 
     def test_devolve_sk_preenchida(self, loader):
         df = pd.DataFrame({'Designacao_Turno': ['TP1'], 'valor': [42]})
-        result = loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        result = loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
         assert 'SK_Turno' in result.columns
         assert result['SK_Turno'].iloc[0] > 0
 
     def test_natural_key_inexistente_devolve_sk_zero(self, loader):
         df = pd.DataFrame({'coluna_inexistente': ['x']})
-        result = loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        result = loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
         assert result['SK_Turno'].iloc[0] == 0
 
     def test_insere_multiplos_registos(self, loader):
         df = pd.DataFrame({'Designacao_Turno': ['TP1', 'TP2', 'PL1']})
-        loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
         assert count_rows('Dim_Turno') == 3
 
     def test_sk_diferente_por_registo(self, loader):
         df = pd.DataFrame({'Designacao_Turno': ['TP1', 'TP2']})
-        result = loader.load_dimension_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
+        result = loader.load_dimensao_scd1(df, 'Dim_Turno', ['Designacao_Turno'], 'SK_Turno')
         assert result['SK_Turno'].iloc[0] != result['SK_Turno'].iloc[1]
 
 
-# load_dimension_scd2
+# load_dimensao_scd2
 
 class TestLoadDimensionScd2:
 
@@ -213,7 +213,7 @@ class TestLoadDimensionScd2:
 
     def test_insere_registo_novo(self, loader):
         df = self._make_espaco_df()
-        loader.load_dimension_scd2(
+        loader.load_dimensao_scd2(
             df, 'Dim_Espaco',
             ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online'],
             'SK_Espaco'
@@ -222,7 +222,7 @@ class TestLoadDimensionScd2:
 
     def test_registo_inserido_fica_ativo(self, loader):
         df = self._make_espaco_df()
-        loader.load_dimension_scd2(
+        loader.load_dimensao_scd2(
             df, 'Dim_Espaco',
             ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online'],
             'SK_Espaco'
@@ -234,13 +234,13 @@ class TestLoadDimensionScd2:
     def test_nao_duplica_registo_sem_alteracao(self, loader):
         df = self._make_espaco_df()
         nks = ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online']
-        loader.load_dimension_scd2(df, 'Dim_Espaco', nks, 'SK_Espaco')
-        loader.load_dimension_scd2(df, 'Dim_Espaco', nks, 'SK_Espaco')
+        loader.load_dimensao_scd2(df, 'Dim_Espaco', nks, 'SK_Espaco')
+        loader.load_dimensao_scd2(df, 'Dim_Espaco', nks, 'SK_Espaco')
         assert count_rows('Dim_Espaco') == 1
 
     def test_devolve_sk_preenchida(self, loader):
         df = self._make_espaco_df()
-        result = loader.load_dimension_scd2(
+        result = loader.load_dimensao_scd2(
             df, 'Dim_Espaco',
             ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online'],
             'SK_Espaco'
@@ -250,12 +250,12 @@ class TestLoadDimensionScd2:
 
     def test_natural_key_inexistente_devolve_sk_zero(self, loader):
         df = pd.DataFrame({'coluna_inexistente': ['x']})
-        result = loader.load_dimension_scd2(df, 'Dim_Espaco', ['Edificio'], 'SK_Espaco')
+        result = loader.load_dimensao_scd2(df, 'Dim_Espaco', ['Edificio'], 'SK_Espaco')
         assert result['SK_Espaco'].iloc[0] == 0
 
     def test_valid_from_e_valid_to_preenchidos(self, loader):
         df = self._make_espaco_df()
-        loader.load_dimension_scd2(
+        loader.load_dimensao_scd2(
             df, 'Dim_Espaco',
             ['Edificio', 'Nome_Espaco', 'Categoria_Espaco', 'Escola_Responsavel', 'is_online'],
             'SK_Espaco'
@@ -293,20 +293,20 @@ class TestLoadFact:
 
     def test_insere_facto_novo(self, loader):
         # Garante que os dummies SK=0 existem antes de inserir factos
-        loader.ensure_dummy_dimension_records()
+        loader.ensure_registos_dimensao_dummy()
         df = self._make_fact_df()
         loader.load_fact(df)
         assert count_rows('Facto_Ocupacao') == 1
 
     def test_nao_duplica_facto_existente(self, loader):
-        loader.ensure_dummy_dimension_records()
+        loader.ensure_registos_dimensao_dummy()
         df = self._make_fact_df()
         loader.load_fact(df)
         loader.load_fact(df)
         assert count_rows('Facto_Ocupacao') == 1
 
     def test_insere_apenas_factos_novos(self, loader):
-        loader.ensure_dummy_dimension_records()
+        loader.ensure_registos_dimensao_dummy()
         df1 = self._make_fact_df("F001")
         df2 = self._make_fact_df("F002")
         loader.load_fact(df1)
@@ -314,7 +314,7 @@ class TestLoadFact:
         assert count_rows('Facto_Ocupacao') == 2
 
     def test_insere_em_chunks(self, loader):
-        loader.ensure_dummy_dimension_records()
+        loader.ensure_registos_dimensao_dummy()
         rows = [{'ID_Ocupacao': f'F{i:04d}', 'SK_Data': 0, 'SK_Hora_Inicio': 0,
                  'SK_Hora_Fim': 0, 'SK_Espaco': 0, 'SK_Unidade_Curricular': 0,
                  'SK_Curso': 0, 'SK_Responsavel': 0, 'SK_Tipo_Atividade': 0,
@@ -326,12 +326,12 @@ class TestLoadFact:
         assert count_rows('Facto_Ocupacao') == 15
 
 
-# ensure_dummy_dimension_records
+# ensure_registos_dimensao_dummy
 
 class TestEnsureDummyDimensionRecords:
 
     def test_cria_dummies_sk_zero(self, loader):
-        loader.ensure_dummy_dimension_records()
+        loader.ensure_registos_dimensao_dummy()
         tabelas = [
             ('Dim_Hora',                 'SK_Hora'),
             ('Dim_Epoca',                'SK_Epoca'),
@@ -352,8 +352,8 @@ class TestEnsureDummyDimensionRecords:
 
     def test_idempotente(self, loader):
         # Correr duas vezes não duplica os dummies
-        loader.ensure_dummy_dimension_records()
-        loader.ensure_dummy_dimension_records()
+        loader.ensure_registos_dimensao_dummy()
+        loader.ensure_registos_dimensao_dummy()
         with _test_engine.connect() as conn:
             result = conn.execute(
                 text("SELECT COUNT(*) FROM Dim_Turno WHERE SK_Turno = 0")

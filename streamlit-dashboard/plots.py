@@ -4,7 +4,7 @@ import calendar
 from config import COLORS, WEEKDAY_ORDER_FULL, WEEKDAY_PT, WEEKDAY_SHORT, WEEKDAY_SHORT_FULL, MESES_PT, DIAS_PT
 
 
-def _base_layout(fig: go.Figure, title: str = "", height: int = 380) -> go.Figure:
+def _layout_base(fig: go.Figure, title: str = "", height: int = 380) -> go.Figure:
     # Layout padrão aplicado a todos os gráficos — fundo transparente, fonte Inter
     fig.update_layout(
         title=dict(
@@ -45,7 +45,7 @@ def chart_ocupacao_tempo(df: pd.DataFrame, granularity: str = "Mensal") -> go.Fi
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação ao longo do tempo")
+        return _layout_base(fig, "Ocupação ao longo do tempo")
 
     df = df.copy()
     # Agrupa por diário, semanal ou mensal conforme o que o user escolheu
@@ -69,7 +69,7 @@ def chart_ocupacao_tempo(df: pd.DataFrame, granularity: str = "Mensal") -> go.Fi
         mode="lines", name="Ocupações",
         hovertemplate="<b>%{x}</b><br>Total: %{y:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, "Ocupação ao longo do tempo", height=380)
+    fig = _layout_base(fig, "Ocupação ao longo do tempo", height=380)
     fig.update_xaxes(title_text="", tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155"))
     return fig
@@ -79,7 +79,7 @@ def chart_ocupacao_semana(df: pd.DataFrame) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação da Semana")
+        return _layout_base(fig, "Ocupação da Semana")
 
     day_order = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
     day_labels = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"]
@@ -106,7 +106,7 @@ def chart_ocupacao_semana(df: pd.DataFrame) -> go.Figure:
         textfont=dict(size=12, color="#1B2139"),
         hovertemplate="<b>%{x}</b><br>Sessões: %{y:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, "Ocupação por Dia da Semana", height=380)
+    fig = _layout_base(fig, "Ocupação por Dia da Semana", height=380)
     fig.update_xaxes(title_text="", tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="Nº Sessões", tickfont=dict(color="#334155"))
     return fig
@@ -116,7 +116,7 @@ def chart_ocupacao_edificio(df: pd.DataFrame) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação por Edifício")
+        return _layout_base(fig, "Ocupação por Edifício")
 
     top = df[df["Edificio"] != "N/D"].groupby("Edificio").size().reset_index(name="Total").sort_values("Total", ascending=False)
     # Trunca nomes longos para não desformatar o gráfico
@@ -134,7 +134,7 @@ def chart_ocupacao_edificio(df: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{label}</b><br>Total: %{value:,.0f}<br>%{percent}<extra></extra>",
         pull=[0.03 if i == 0 else 0 for i in range(len(top))],
     )])
-    fig = _base_layout(fig, "Ocupação por Edifício", height=380)
+    fig = _layout_base(fig, "Ocupação por Edifício", height=380)
     fig.update_layout(showlegend=True, margin=dict(r=140),
         legend=dict(orientation="v", yanchor="top", y=0.88, xanchor="left", x=1.02, font=dict(size=10)))
     return fig
@@ -144,7 +144,7 @@ def chart_heatmap_ocupacao(df_heatmap: pd.DataFrame) -> go.Figure:
     if df_heatmap.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Mapa de Calor — Ocupação por Hora")
+        return _layout_base(fig, "Mapa de Calor — Ocupação por Hora")
 
     pivot, y_labels, _ = _build_heatmap_pivot(df_heatmap, "Total_Ocupacoes")
 
@@ -154,7 +154,7 @@ def chart_heatmap_ocupacao(df_heatmap: pd.DataFrame) -> go.Figure:
         hovertemplate="<b>%{y}</b> às <b>%{x}</b><br>Ocupações: %{z:,.0f}<extra></extra>",
         showscale=True, colorbar=dict(title=dict(text="Ocupações", font=dict(size=11)), tickfont=dict(size=10), thickness=12, len=0.8),
     ))
-    fig = _base_layout(fig, "Mapa de Calor — Ocupação por Hora", height=350)
+    fig = _layout_base(fig, "Mapa de Calor — Ocupação por Hora", height=350)
     fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(color="#334155"))
     fig.update_xaxes(showgrid=False, side="top", tickfont=dict(color="#334155"))
     return fig
@@ -164,7 +164,7 @@ def chart_top_espacos(df: pd.DataFrame, top_n: int = 10) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, f"Espaços com maior ocupação")
+        return _layout_base(fig, f"Espaços com maior ocupação")
 
     top = (df[df["Nome_Espaco"] != "N/D"].groupby("Nome_Espaco").size().reset_index(name="Total").sort_values("Total", ascending=True).tail(top_n))
     fig = go.Figure(go.Bar(
@@ -174,7 +174,7 @@ def chart_top_espacos(df: pd.DataFrame, top_n: int = 10) -> go.Figure:
         textfont=dict(size=11, color="#1B2139"),
         hovertemplate="<b>%{y}</b><br>Total: %{x:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, f"Espaços com maior ocupação", height=400)
+    fig = _layout_base(fig, f"Espaços com maior ocupação", height=400)
     fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155"))
     return fig
@@ -184,7 +184,7 @@ def chart_bottom_espacos(df: pd.DataFrame, bottom_n: int = 10) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, f"Espaços com menor ocupação")
+        return _layout_base(fig, f"Espaços com menor ocupação")
 
     bottom = (df[df["Nome_Espaco"] != "N/D"].groupby("Nome_Espaco").size().reset_index(name="Total").sort_values("Total", ascending=True).head(bottom_n))
     fig = go.Figure(go.Bar(
@@ -194,7 +194,7 @@ def chart_bottom_espacos(df: pd.DataFrame, bottom_n: int = 10) -> go.Figure:
         textfont=dict(size=11, color="#1B2139"),
         hovertemplate="<b>%{y}</b><br>Total: %{x:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, f"Espaços com menor ocupação", height=400)
+    fig = _layout_base(fig, f"Espaços com menor ocupação", height=400)
     fig.update_xaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="", showgrid=False, tickfont=dict(color="#334155"), autorange="reversed")
     return fig
@@ -204,7 +204,7 @@ def chart_tipo_atividade(df: pd.DataFrame) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Distribuição por Tipo de Atividade")
+        return _layout_base(fig, "Distribuição por Tipo de Atividade")
 
     grouped = (df[df["Designacao_Atividade"] != "N/D"].groupby("Designacao_Atividade").size().reset_index(name="Total").sort_values("Total", ascending=False))
     fig = go.Figure(go.Bar(
@@ -213,7 +213,7 @@ def chart_tipo_atividade(df: pd.DataFrame) -> go.Figure:
         text=grouped["Total"].apply(lambda v: f"{v:,.0f}"), textposition="outside", textfont=dict(size=11),
         hovertemplate="<b>%{x}</b><br>Total: %{y:,.0f}<extra></extra>",
     ))
-    fig = _base_layout(fig, "Distribuição por Tipo de Atividade", height=370)
+    fig = _layout_base(fig, "Distribuição por Tipo de Atividade", height=370)
     fig.update_xaxes(title_text="", tickangle=-30, tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="Nº Ocupações", tickfont=dict(color="#334155"))
     return fig
@@ -223,7 +223,7 @@ def chart_categoria_espaco(df: pd.DataFrame) -> go.Figure:
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação por Categoria de Espaço")
+        return _layout_base(fig, "Ocupação por Categoria de Espaço")
 
     grouped = (df[df["Categoria_Espaco"] != "N/D"].groupby("Categoria_Espaco").size().reset_index(name="Total").sort_values("Total", ascending=False))
     fig = go.Figure(data=[go.Pie(
@@ -232,15 +232,15 @@ def chart_categoria_espaco(df: pd.DataFrame) -> go.Figure:
         textinfo="label+percent", textposition="outside", textfont=dict(size=11),
         hovertemplate="<b>%{label}</b><br>Total: %{value:,.0f}<br>%{percent}<extra></extra>",
     )])
-    fig = _base_layout(fig, "Ocupação por Categoria de Espaço", height=370)
+    fig = _layout_base(fig, "Ocupação por Categoria de Espaço", height=370)
     return fig
 
 
-def chart_period_of_day(df: pd.DataFrame) -> go.Figure:
+def chart_periodo_dia(df: pd.DataFrame) -> go.Figure:
     if df.empty or "Periodo_Dia" not in df.columns:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação por Período do Dia")
+        return _layout_base(fig, "Ocupação por Período do Dia")
 
     period_order = ["Manhã", "Tarde", "Noite"]
     counts = df["Periodo_Dia"].value_counts().reindex(period_order, fill_value=0).reset_index()
@@ -253,23 +253,23 @@ def chart_period_of_day(df: pd.DataFrame) -> go.Figure:
         textinfo="label+percent", textposition="outside", textfont=dict(size=12),
         hovertemplate="<b>%{label}</b><br>Total: %{value:,.0f}<br>%{percent}<extra></extra>",
     )])
-    fig = _base_layout(fig, "Ocupação por Período do Dia", height=370)
+    fig = _layout_base(fig, "Ocupação por Período do Dia", height=370)
     return fig
 
 
-def chart_single_space_heatmap(df: pd.DataFrame) -> go.Figure:
+def chart_heatmap_espaco_unico(df: pd.DataFrame) -> go.Figure:
     # Mapa de calor semanal para uma sala específica — células vazias ficam a verde claro
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação Semanal — Sala")
+        return _layout_base(fig, "Ocupação Semanal — Sala")
 
     day_order = ["Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"]
     df = df[df["DiaSemana"].isin(day_order)].copy()
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação Semanal — Sala")
+        return _layout_base(fig, "Ocupação Semanal — Sala")
 
     # Conta sessões por (dia, hora)
     grid = df.groupby(["DiaSemana", "Hora_Inicio"]).size().reset_index(name="count")
@@ -298,19 +298,19 @@ def chart_single_space_heatmap(df: pd.DataFrame) -> go.Figure:
         showscale=True,
         colorbar=dict(title=dict(text="Sessões", font=dict(size=11)), tickfont=dict(size=10), thickness=12, len=0.8),
     ))
-    fig = _base_layout(fig, "Ocupação Semanal — Sala", height=350)
+    fig = _layout_base(fig, "Ocupação Semanal — Sala", height=350)
     fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(color="#334155"))
     fig.update_xaxes(showgrid=False, side="top", dtick=1, tickfont=dict(color="#334155"))
     return fig
 
 
-def chart_anomalies_trend(df: pd.DataFrame) -> go.Figure:
+def chart_tendencia_anomalias(df: pd.DataFrame) -> go.Figure:
     # Evolução temporal das ghost sessions (aulas com 0 presenças)
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados de anomalias", showarrow=False,
                            font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Evolução de Anomalias")
+        return _layout_base(fig, "Evolução de Anomalias")
 
     fig = go.Figure()
     fig.add_trace(go.Scatter(
@@ -324,18 +324,18 @@ def chart_anomalies_trend(df: pd.DataFrame) -> go.Figure:
         name="Ghost Sessions",
         hovertemplate="<b>%{x}</b><br>Ghost: %{y}<extra></extra>",
     ))
-    fig = _base_layout(fig, "Evolução de Sessões Fantasma (Ghost)", height=350)
+    fig = _layout_base(fig, "Evolução de Sessões Fantasma (Ghost)", height=350)
     fig.update_xaxes(title_text="", tickangle=-45, tickfont=dict(color="#334155"))
     fig.update_yaxes(title_text="Nº Ghost Sessions", tickfont=dict(color="#334155"))
     return fig
 
 
-def chart_monthly_calendar(df: pd.DataFrame, year: int, month: int) -> go.Figure:
+def chart_calendario_mensal(df: pd.DataFrame, year: int, month: int) -> go.Figure:
     # Calendário onde cada célula representa um dia do mês, cor indica nº de sessões
     if df.empty:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, f"Calendário {MESES_PT[month]} {year}")
+        return _layout_base(fig, f"Calendário {MESES_PT[month]} {year}")
 
     df = df.copy()
     df["DataCompleta"] = pd.to_datetime(df["DataCompleta"])
@@ -413,7 +413,7 @@ def chart_monthly_calendar(df: pd.DataFrame, year: int, month: int) -> go.Figure
     return fig
 
 
-def chart_critical_heatmap(
+def chart_heatmap_critico(
     df: pd.DataFrame,
     total_rooms: int,
     low_threshold: float = 30.0,
@@ -423,7 +423,7 @@ def chart_critical_heatmap(
     if df.empty or total_rooms == 0:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados", showarrow=False, font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Ocupação Crítica por Horário")
+        return _layout_base(fig, "Ocupação Crítica por Horário")
 
     df = df.copy()
     # Percentagem de salas ocupadas em cada slot
@@ -458,19 +458,19 @@ def chart_critical_heatmap(
         ),
     ))
 
-    fig = _base_layout(fig, "Ocupação Crítica por Horário", height=350)
+    fig = _layout_base(fig, "Ocupação Crítica por Horário", height=350)
     fig.update_yaxes(showgrid=False, autorange="reversed", tickfont=dict(color="#334155"))
     fig.update_xaxes(showgrid=False, side="top", tickfont=dict(color="#334155"))
     return fig
 
 
-def chart_comparison_trend(rooms_dict: dict) -> go.Figure:
+def chart_tendencia_comparacao(rooms_dict: dict) -> go.Figure:
     # Sobreposição de tendências diárias para várias salas — uma linha por sala
     if not rooms_dict:
         fig = go.Figure()
         fig.add_annotation(text="Sem dados para comparação", showarrow=False,
                            font=dict(size=16, color="#94A3B8"))
-        return _base_layout(fig, "Comparação de Ocupação")
+        return _layout_base(fig, "Comparação de Ocupação")
 
     palette = COLORS["donut_palette"]
     fig = go.Figure()
@@ -492,7 +492,7 @@ def chart_comparison_trend(rooms_dict: dict) -> go.Figure:
             hovertemplate=f"<b>{room_name}</b><br>%{{x}}<br>Sessões: %{{y}}<extra></extra>",
         ))
 
-    fig = _base_layout(fig, "Comparação de Ocupação — Tendência Diária", height=450)
+    fig = _layout_base(fig, "Comparação de Ocupação — Tendência Diária", height=450)
     fig.update_layout(
         margin=dict(l=50, r=30, t=60, b=120),
         legend=dict(
@@ -508,7 +508,7 @@ def chart_comparison_trend(rooms_dict: dict) -> go.Figure:
     fig.update_yaxes(title_text="Nº Sessões", tickfont=dict(color="#334155"))
     return fig
 
-def _get_color_map(df: pd.DataFrame) -> dict:
+def _get_mapa_cores(df: pd.DataFrame) -> dict:
     # Atribui uma cor estável a cada UC — ordem alfabética para ser consistente entre vistas
     keys = sorted(df["Designacao_UC"].dropna().unique().tolist())
     return {k: COLORS["turno_palette"][i % len(COLORS["turno_palette"])] for i, k in enumerate(keys)}
@@ -542,7 +542,7 @@ def _wrap_text(text: str, max_chars: int = 18) -> str:
     return "<br>".join(lines)
 
 
-def _base_calendar_layout(fig: go.Figure, title: str, height: int) -> go.Figure:
+def _layout_base_calendario(fig: go.Figure, title: str, height: int) -> go.Figure:
     # Layout base para as vistas de calendário (dia, semana, mês)
     # Margem do topo aumentada para o título não tapar o cabeçalho dos dias
     fig.update_layout(
@@ -557,13 +557,13 @@ def _base_calendar_layout(fig: go.Figure, title: str, height: int) -> go.Figure:
     return fig
 
 
-def chart_calendar_day(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
+def chart_calendario_dia(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
     # Vista diária — uma coluna com os blocos de aulas ordenados por hora
     day_df = df[df["DataCompleta"].dt.date == date.date()].copy()
     fig = go.Figure()
 
     y_min, y_max = 8, 24
-    color_map = _get_color_map(df)
+    color_map = _get_mapa_cores(df)
 
     # Linhas de grelha hora a hora
     for h in range(y_min, y_max + 1):
@@ -610,16 +610,16 @@ def chart_calendar_day(df: pd.DataFrame, date: pd.Timestamp) -> go.Figure:
 
     fig.update_xaxes(visible=False, range=[0, 1])
     fig.update_yaxes(range=[y_max, y_min], showgrid=False, showticklabels=False, zeroline=False)
-    fig = _base_calendar_layout(fig, f"📅 {_fmt_date_pt(date)}", height=700)
+    fig = _layout_base_calendario(fig, f"📅 {_fmt_date_pt(date)}", height=700)
     return fig
 
 
-def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title: str = "") -> go.Figure:
+def chart_calendario_semana(df: pd.DataFrame, week_dates: list[pd.Timestamp], title: str = "") -> go.Figure:
     if not df.empty and "DataCompleta" in df.columns:
         df["DataCompleta"] = pd.to_datetime(df["DataCompleta"], errors='coerce')
     # Vista semanal — uma coluna por dia, blocos de aulas sobrepostos na grelha horária
     fig = go.Figure()
-    color_map = _get_color_map(df)
+    color_map = _get_mapa_cores(df)
 
     y_min, y_max = 8, 24
     n_days = len(week_dates)
@@ -700,12 +700,12 @@ def chart_calendar_week(df: pd.DataFrame, week_dates: list[pd.Timestamp], title:
 
     fig.update_xaxes(range=[-0.3, n_days], showgrid=False, showticklabels=False, zeroline=False)
     fig.update_yaxes(range=[y_max + 1, y_min - 0.5], showgrid=False, showticklabels=False, zeroline=False)
-    fig = _base_calendar_layout(fig, title or "📅 Vista Semanal", height=750)
+    fig = _layout_base_calendario(fig, title or "📅 Vista Semanal", height=750)
     return fig
 
-def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
+def chart_calendario_mes(df: pd.DataFrame, year: int, month: int) -> go.Figure:
     import calendar as cal_lib
-    color_map = _get_color_map(df)
+    color_map = _get_mapa_cores(df)
 
     fig = go.Figure()
     cal_matrix = cal_lib.monthcalendar(year, month)
@@ -801,6 +801,6 @@ def chart_calendar_month(df: pd.DataFrame, year: int, month: int) -> go.Figure:
 
     fig.update_xaxes(range=[0, 6], showgrid=False, showticklabels=False, zeroline=False)
     fig.update_yaxes(range=[0, 1], showgrid=False, showticklabels=False, zeroline=False)
-    fig = _base_calendar_layout(fig, f"📅 {MESES_PT[month]} {year}", height=total_height)
+    fig = _layout_base_calendario(fig, f"📅 {MESES_PT[month]} {year}", height=total_height)
     fig.update_layout(margin=dict(l=10, r=10, t=70, b=10))
     return fig

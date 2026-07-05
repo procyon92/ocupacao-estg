@@ -1,10 +1,10 @@
 import streamlit as st
 import pandas as pd
-from plots import chart_calendar_day, chart_calendar_week, chart_calendar_month
+from plots import chart_calendario_dia, chart_calendario_semana, chart_calendario_mes
 from config import PLOTLY_CONFIG, MESES_PT
 
 
-def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
+def render_calendario_horario(df: pd.DataFrame) -> pd.DataFrame:
     # Renderiza o calendário de horários e devolve o subset do df
     # correspondente ao período atualmente selecionado (dia, semana ou mês)
     if df.empty:
@@ -27,7 +27,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
             selected_date = st.date_input("Data", value=min_date,
                                           min_value=min_date, max_value=max_date,
                                           key="cal_day_date")
-        fig = chart_calendar_day(df, pd.Timestamp(selected_date))
+        fig = chart_calendario_dia(df, pd.Timestamp(selected_date))
         st.plotly_chart(fig, use_container_width=True, key="chart_cal_day", config=PLOTLY_CONFIG)
         return df[df["DataCompleta"].dt.date == selected_date].copy()
 
@@ -54,7 +54,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
                       if (week_ts + pd.Timedelta(days=i)).date() <= max_date]
         sl_num = week_sl_map.get(sel_week, "?")
         title  = f"📅 Semana Letiva {sl_num} — {week_ts.strftime('%d/%m')} a {(week_ts + pd.Timedelta(days=6)).strftime('%d/%m/%Y')}"
-        fig = chart_calendar_week(df, week_dates, title=title)
+        fig = chart_calendario_semana(df, week_dates, title=title)
         st.plotly_chart(fig, use_container_width=True, key="chart_cal_week", config=PLOTLY_CONFIG)
         return df[(df["DataCompleta"].dt.date >= sel_week) &
                   (df["DataCompleta"].dt.date <= week_end.date())].copy()
@@ -69,7 +69,7 @@ def render_timetable_calendar(df: pd.DataFrame) -> pd.DataFrame:
                 format_func=lambda p: f"{MESES_PT[p.month]} {p.year}",
                 key="cal_month_sel"
             )
-        fig = chart_calendar_month(df, sel_month.year, sel_month.month)
+        fig = chart_calendario_mes(df, sel_month.year, sel_month.month)
         st.plotly_chart(fig, use_container_width=True, key="chart_cal_month", config=PLOTLY_CONFIG)
         return df[(df["DataCompleta"].dt.year == sel_month.year) &
                   (df["DataCompleta"].dt.month == sel_month.month)].copy()

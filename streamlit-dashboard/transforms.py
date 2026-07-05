@@ -1,10 +1,10 @@
 from __future__ import annotations
 import pandas as pd
 from config import Omisso, DAILY_CAPACITY_MINUTES
-from utils import normalize_docente, clamp, pct
+from utils import normalizar_docente, clamp, pct
 
 
-def apply_post_filters(
+def apply_filtros_post(
     df: pd.DataFrame,
     hide_online: bool = False,
     hide_concurrent: bool = False,
@@ -22,7 +22,7 @@ def apply_post_filters(
     return df
 
 
-def normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+def normalizar_dataframe(df: pd.DataFrame) -> pd.DataFrame:
     # Normaliza colunas comuns a todos os DataFrames de factos:
     # converte DataCompleta para datetime e limpa nomes de docentes em branco.
     # Trabalha sempre numa cópia — o DataFrame original nunca é mutado.
@@ -35,12 +35,12 @@ def normalize_dataframe(df: pd.DataFrame) -> pd.DataFrame:
         df["DataCompleta"] = pd.to_datetime(df["DataCompleta"])
 
     if "Docente_Responsavel" in df.columns:
-        df["Docente_Responsavel"] = df["Docente_Responsavel"].apply(normalize_docente)
+        df["Docente_Responsavel"] = df["Docente_Responsavel"].apply(normalizar_docente)
 
     return df
 
 
-def compute_general_kpis(df: pd.DataFrame) -> dict:
+def compute_kpis_gerais(df: pd.DataFrame) -> dict:
     # Calcula o conjunto padrão de KPIs usado pelos perfis gerais.
     # Assume que o DataFrame já foi normalizado (DataCompleta é datetime).
     total_ocup       = len(df)
@@ -69,7 +69,7 @@ def compute_general_kpis(df: pd.DataFrame) -> dict:
     }
 
 
-def build_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
+def build_dados_heatmap(df: pd.DataFrame) -> pd.DataFrame:
     # Agrega o número de ocupações por (dia da semana, hora de início) — base para o mapa de calor
     return (
         df.groupby(["DiaSemana", "Hora_Inicio"])
@@ -78,7 +78,7 @@ def build_heatmap_data(df: pd.DataFrame) -> pd.DataFrame:
     )
 
 
-def combine_anomaly_flags(row: pd.Series) -> str:
+def combine_flags_anomalia(row: pd.Series) -> str:
     # Constrói uma string legível com as anomalias detetadas para uma linha de factos
     flags = []
     if row.get("Ghost_Flag"):  flags.append("👻 Ghost")

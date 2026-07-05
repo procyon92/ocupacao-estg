@@ -6,7 +6,7 @@ from __future__ import annotations
 from config import Omisso
 
 
-def fmt_duration(minutes: float) -> str:
+def fmt_duracao(minutes: float) -> str:
     """
     Convert a minute count to a human-readable string.
     Examples: 90 → "1h30", 5 → "0h05", 0 → "0h00"
@@ -18,7 +18,7 @@ def fmt_duration(minutes: float) -> str:
     return f"{h}h{m:02d}"
 
 
-def fmt_duration_long(minutes: float) -> str:
+def fmt_duracao_long(minutes: float) -> str:
     """
     Verbose form used in the labs capacity table.
     Examples: 90 → "1h 30m", 5 → "0h 05m"
@@ -30,7 +30,7 @@ def fmt_duration_long(minutes: float) -> str:
     return f"{h}h {m:02d}m"
 
 
-def normalize_docente(value: object) -> str:
+def normalizar_docente(value: object) -> str:
     """
     Replace a blank or single-char teacher name with the canonical Omisso.
     Applied post-query so the display layer never sees raw empty strings.

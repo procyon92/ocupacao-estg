@@ -6,7 +6,7 @@ from datetime import datetime
 import streamlit as st
 
 from config import APP_TITLE, PAGE_TITLE, FAVICON, LAB_CATEGORY, Omisso, CACHE_TTL_COLD
-from auth import check_auth, login_page, logout
+from auth import check_autenticacao, pagina_login, terminar_sessao
 from models import Filters, SessionKeys
 from queries import (
     get_anos_letivos, get_escolas, get_departamentos, get_edificios,
@@ -45,8 +45,8 @@ html body section[data-testid="stMain"] .block-container {
 """, unsafe_allow_html=True)
 
 # Autenticação — para tudo se não estiver autenticado
-if not check_auth():
-    login_page()
+if not check_autenticacao():
+    pagina_login()
     st.stop()
 
 # Navegação
@@ -69,12 +69,12 @@ _MONTH = datetime.now().month
 _DEFAULT_SEM = 1 if _MONTH in {9, 10, 11, 12, 1, 2} else 2 if _MONTH in {3, 4, 5, 6, 7} else None
 
 
-def _ano_index(anos: list[str]) -> int:
+def _indice_ano(anos: list[str]) -> int:
     val = st.session_state.get(SessionKeys.ANO_LETIVO, _DEFAULT_ANO)
     return (anos.index(val) + 1) if val in anos else 0
 
 
-def _sem_index() -> int:
+def _indice_semestre() -> int:
     val = st.session_state.get(SessionKeys.SEMESTRE, _DEFAULT_SEM)
     return ([1, 2].index(val) + 1) if val in (1, 2) else 0
 
@@ -104,7 +104,7 @@ _PROFILE_WIDGETS: dict[str, list[str]] = {
 }
 
 
-def _reset_filters() -> None:
+def _repor_filtros() -> None:
     anos = get_anos_letivos()
     month = datetime.now().month
     defaults = {
@@ -131,7 +131,7 @@ def _reset_filters() -> None:
         st.session_state[key] = defaults.get(key, Omisso.NO_FILTER)
 
 
-def _build_active_string(vals: dict) -> str:
+def _build_string_filtros_ativos(vals: dict) -> str:
     parts = []
     if vals.get("ano_letivo"):         parts.append(f"📅 {vals['ano_letivo']}")
     if vals.get("semestre"):           parts.append(f"Sem {vals['semestre']}")
@@ -148,7 +148,7 @@ def _build_active_string(vals: dict) -> str:
     return " | ".join(parts) if parts else "Sem filtros ativos"
 
 
-def _render_filters(profile: str) -> dict:
+def _render_filtros(profile: str) -> dict:
     fw       = _PROFILE_WIDGETS[profile]
     is_lab   = profile == "Laboratórios"
     vals: dict = {}
@@ -176,12 +176,12 @@ def _render_filters(profile: str) -> dict:
         if wname == "ano_letivo":
             vals["ano_letivo"] = st.selectbox(
                 "Ano Letivo", [Omisso.NO_FILTER] + _ANOS,
-                index=_ano_index(_ANOS), key=SessionKeys.ANO_LETIVO,
+                index=_indice_ano(_ANOS), key=SessionKeys.ANO_LETIVO,
             )
         elif wname == "semestre":
             vals["semestre"] = st.selectbox(
                 "Semestre", [Omisso.NO_FILTER, 1, 2],
-                index=_sem_index(), key=SessionKeys.SEMESTRE,
+                index=_indice_semestre(), key=SessionKeys.SEMESTRE,
             )
         elif wname == "semana":
             ano = vals.get("ano_letivo", Omisso.NO_FILTER)
@@ -281,7 +281,7 @@ def _render_filters(profile: str) -> dict:
     return vals
 
 
-def _extract_filters(vals: dict) -> Filters:
+def _extract_filtros(vals: dict) -> Filters:
     NF  = Omisso.NO_FILTER
     NFF = Omisso.NO_FILTER_F
 
@@ -321,22 +321,22 @@ with st.sidebar:
     st.markdown('<div class="sidebar-title">🔍 Filtros</div>', unsafe_allow_html=True)
     st.markdown('<div class="sidebar-divider"></div>', unsafe_allow_html=True)
 
-    raw_vals = _render_filters(profile)
+    raw_vals = _render_filtros(profile)
 
-    st.button("Limpar Filtros", use_container_width=True, on_click=_reset_filters)
+    st.button("Limpar Filtros", use_container_width=True, on_click=_repor_filtros)
     st.markdown("<div style='flex:1'></div>", unsafe_allow_html=True)
     st.markdown("---")
     st.markdown(f"**{st.session_state.get('username', '—')}**")
     if st.button("Terminar Sessão", use_container_width=True, type="primary"):
-        logout()
+        terminar_sessao()
     st.markdown("---")
 
 # Constrói o dict de filtros tipado
-filters: Filters = _extract_filters(raw_vals)
+filters: Filters = _extract_filtros(raw_vals)
 filters["only_labs"] = (profile == "Laboratórios")
 
 # Barra de filtros ativos no topo da página
-_active_str = _build_active_string(raw_vals)
+_active_str = _build_string_filtros_ativos(raw_vals)
 if _active_str != "Sem filtros ativos":
     st.markdown(
         f"<h4 style='color:#1B2139;font-weight:700;margin-bottom:0.3rem;'>Filtros aplicados</h4>"

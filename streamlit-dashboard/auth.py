@@ -4,7 +4,7 @@ import streamlit as st
 from config import AUTH_USERS
 
 
-def check_auth() -> bool:
+def check_autenticacao() -> bool:
     # Verifica se já existe uma sessão autenticada
     return st.session_state.get("authenticated", False)
 
@@ -15,7 +15,7 @@ def _img_to_b64(path: str) -> str:
         return base64.b64encode(f.read()).decode()
 
 
-def login_page():
+def pagina_login():
     # Esconde a sidebar e qualquer outro elemento que possa aparecer durante o rerun
     st.markdown("""
     <style>
@@ -73,7 +73,7 @@ def login_page():
         )
 
 
-def logout():
+def terminar_sessao():
     # Limpa a sessão e regressa à página de login
     st.session_state["authenticated"] = False
     st.session_state.pop("username", None)

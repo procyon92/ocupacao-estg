@@ -107,13 +107,13 @@ def main():
 
     # Step 1 — Garante que os dummies SK=0 existem antes de qualquer FK
     logger.info("[STEP 1] Inicializando Dimensões Estáticas...")
-    loader.ensure_dummy_dimension_records()
+    loader.ensure_registos_dimensao_dummy()
 
     # Step 2 — Dim_Hora e Dim_Data têm PK fixa (não AUTO_INCREMENT)
     logger.info("[STEP 2] Carregando Dim_Hora e Dim_Data...")
     df_dim_hora = transformer.construir_dimensao_hora()
-    loader.load_fixed_pk_dimension(df_dim_hora, "Dim_Hora", "SK_Hora")
-    loader.load_fixed_pk_dimension(df_dim_data, "Dim_Data", "SK_Data")
+    loader.load_dimensao_pk_fixa(df_dim_hora, "Dim_Hora", "SK_Hora")
+    loader.load_dimensao_pk_fixa(df_dim_data, "Dim_Data", "SK_Data")
 
     # Step 3 — Dimensões dinâmicas: SCD2 para as que têm histórico, SCD1 para as restantes
     logger.info("[STEP 3] Sincronizando Dimensões Dinâmicas...")
@@ -134,14 +134,14 @@ def main():
         if all(k in df_transformado.columns for k in chaves):
             logger.info(f"  -> Processando {tabela}...")
             if tabela in tabelas_scd2:
-                df_transformado = loader.load_dimension_scd2(df_transformado, tabela, chaves, sk)
+                df_transformado = loader.load_dimensao_scd2(df_transformado, tabela, chaves, sk)
             else:
-                df_transformado = loader.load_dimension_scd1(df_transformado, tabela, chaves, sk)
+                df_transformado = loader.load_dimensao_scd1(df_transformado, tabela, chaves, sk)
 
     # Step 4 — Prepara e carrega a tabela de factos
     logger.info("[STEP 4] Preparando e Carregando Facto_Ocupacao...")
     df_payload = loader.prepare_fact_payload(df_transformado)
-    loader.print_quality_metrics(df_payload)
+    loader.print_metricas_qualidade(df_payload)
     loader.load_fact(df_payload)
 
 

@@ -3,12 +3,12 @@ import streamlit as st
 import pandas as pd
 from models import Filters
 from view.base import BaseProfile
-from queries import get_space_detail_data, get_espacos
-from transforms import normalize_dataframe, apply_post_filters
-from components import render_spacer, render_section_header
+from queries import get_dados_detalhe_espaco, get_espacos
+from transforms import normalizar_dataframe, apply_filtros_post
+from components import render_spacer, render_cabecalho_seccao
 from utils import clamp, pct
 from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG
-from plots import chart_top_espacos, chart_comparison_trend
+from plots import chart_top_espacos, chart_tendencia_comparacao
 
 
 class ComparacaoProfile(BaseProfile):
@@ -33,9 +33,9 @@ class ComparacaoProfile(BaseProfile):
         rooms_data: dict[str, pd.DataFrame] = {}
         with st.spinner("A carregar dados das salas..."):
             for room in selected_rooms:
-                rd = apply_post_filters(
-                    normalize_dataframe(
-                        get_space_detail_data(
+                rd = apply_filtros_post(
+                    normalizar_dataframe(
+                        get_dados_detalhe_espaco(
                             space_name=room,
                             ano_escolar=filters.get("ano_letivo"),
                             semestre=filters.get("semestre"),
@@ -53,7 +53,7 @@ class ComparacaoProfile(BaseProfile):
             st.warning("Nenhum dado encontrado para as salas selecionadas.")
             return
 
-        render_section_header("Tabela Comparativa")
+        render_cabecalho_seccao("Tabela Comparativa")
         rows = [
             {
                 "Sala":            name,
@@ -70,7 +70,7 @@ class ComparacaoProfile(BaseProfile):
         st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
         render_spacer()
-        render_section_header("Sessões por Sala")
+        render_cabecalho_seccao("Sessões por Sala")
         # Junta todos os DataFrames numa coluna Nome_Espaco para o gráfico de barras
         combined = pd.concat(
             [rd.assign(Nome_Espaco=name) for name, rd in rooms_data.items()],
@@ -82,8 +82,8 @@ class ComparacaoProfile(BaseProfile):
         )
 
         render_spacer()
-        render_section_header("Tendência Diária Comparativa")
+        render_cabecalho_seccao("Tendência Diária Comparativa")
         st.plotly_chart(
-            chart_comparison_trend(rooms_data),
+            chart_tendencia_comparacao(rooms_data),
             use_container_width=True, key="chart_compare_trend", config= PLOTLY_CONFIG
         )

@@ -27,7 +27,7 @@ def render_kpi(label: str, value: str, icon: str = "", tooltip: str = "") -> Non
     """, unsafe_allow_html=True)
 
 
-def render_rooms_kpi_row(kpi: dict, total_rooms: int) -> None:
+def render_linha_kpi_salas(kpi: dict, total_rooms: int) -> None:
     # Linha de KPIs de salas (ocupadas / livres / total) — partilhada entre várias views
     espacos_livres = max(total_rooms - kpi["espacos_ocupados"], 0)
     c1, c2, c3 = st.columns(3)
@@ -36,7 +36,7 @@ def render_rooms_kpi_row(kpi: dict, total_rooms: int) -> None:
     with c3: render_kpi("Salas Totais",   f"{total_rooms:,}",             "📐")
 
 
-def render_quality_card(label: str, value: int, color: str) -> None:
+def render_cartao_qualidade(label: str, value: int, color: str) -> None:
     st.markdown(f"""
     <div style="background:{color};border-radius:12px;padding:1rem 1.2rem;margin-bottom:0.6rem;">
         <span style="color:#475569;font-size:0.78rem;font-weight:500;">{label}</span>
@@ -45,7 +45,7 @@ def render_quality_card(label: str, value: int, color: str) -> None:
     """, unsafe_allow_html=True)
 
 
-def render_section_header(title: str) -> None:
+def render_cabecalho_seccao(title: str) -> None:
     st.markdown(f"<h4 style='color:#1B2139;font-weight:700;'>{title}</h4>", unsafe_allow_html=True)
 
 
@@ -53,7 +53,7 @@ def render_spacer(rem: float = 1.0) -> None:
     st.markdown(f"<div style='height:{rem}rem'></div>", unsafe_allow_html=True)
 
 
-def render_dimension_coverage(df: pd.DataFrame) -> None:
+def render_cobertura_dimensao(df: pd.DataFrame) -> None:
     # Para cada dimensão, calcula quantos registos têm valor preenchido (diferente de N/D)
     coverage = []
     for label, col in DIMENSION_COVERAGE_COLS.items():

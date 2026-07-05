@@ -2,13 +2,13 @@ from __future__ import annotations
 import streamlit as st
 from models import Filters
 from view.base import BaseProfile
-from queries import get_space_detail_data, get_espacos
-from transforms import normalize_dataframe
-from components import render_kpi, render_spacer, render_section_header
+from queries import get_dados_detalhe_espaco, get_espacos
+from transforms import normalizar_dataframe
+from components import render_kpi, render_spacer, render_cabecalho_seccao
 from utils import clamp, pct
 from config import DAILY_CAPACITY_MINUTES, PLOTLY_CONFIG, Omisso, MESES_PT
-from plots import chart_single_space_heatmap, chart_monthly_calendar
-from calendar_chart import render_timetable_calendar
+from plots import chart_heatmap_espaco_unico, chart_calendario_mensal
+from calendar_chart import render_calendario_horario
 from view.tooltips import TAXA_UTILIZACAO, GHOST
 
 
@@ -30,8 +30,8 @@ class DetalheEspacoProfile(BaseProfile):
         if selected_room == Omisso.NO_ROOM:
             return self._empty("Escolha um espaço para visualizar os detalhes.")
 
-        df = normalize_dataframe(
-            get_space_detail_data(
+        df = normalizar_dataframe(
+            get_dados_detalhe_espaco(
                 space_name=selected_room,
                 ano_escolar=filters.get("ano_letivo"),
                 semestre=filters.get("semestre"),
@@ -55,10 +55,10 @@ class DetalheEspacoProfile(BaseProfile):
         with k4: render_kpi("Sessões Vazias",  f"{ghost_count:,}", "👻", GHOST)
 
         render_spacer(1.2)
-        render_section_header("Ocupação Semanal e Calendário Mensal")
+        render_cabecalho_seccao("Ocupação Semanal e Calendário Mensal")
         col_heatmap, col_calendar = st.columns(2)
         with col_heatmap:
-            st.plotly_chart(chart_single_space_heatmap(df),
+            st.plotly_chart(chart_heatmap_espaco_unico(df),
                             use_container_width=True, key="chart_space_heat", config= PLOTLY_CONFIG)
         with col_calendar:
             c1, c2 = st.columns(2)
@@ -71,15 +71,15 @@ class DetalheEspacoProfile(BaseProfile):
                     format_func=lambda m: MESES_PT[m],
                     index=0, key="cal_month",
                 )
-            st.plotly_chart(chart_monthly_calendar(df, int(cal_year), int(cal_month)),
+            st.plotly_chart(chart_calendario_mensal(df, int(cal_year), int(cal_month)),
                             use_container_width=True, key="chart_month_cal", config= PLOTLY_CONFIG)
 
         render_spacer()
-        render_section_header("Calendário de Horários")
-        filtered_df = render_timetable_calendar(df)
+        render_cabecalho_seccao("Calendário de Horários")
+        filtered_df = render_calendario_horario(df)
 
         render_spacer()
-        render_section_header("Horário Analítico")
+        render_cabecalho_seccao("Horário Analítico")
         # Usa o subset filtrado pelo calendário se existir, senão usa tudo
         timetable_df = filtered_df if (filtered_df is not None and not filtered_df.empty) else df
         timetable = timetable_df.sort_values(

@@ -1,16 +1,16 @@
 from __future__ import annotations
 import pandas as pd
 from models import Filters
-from queries import get_filtered_data
-from transforms import normalize_dataframe, apply_post_filters
+from queries import get_dados_filtrados
+from transforms import normalizar_dataframe, apply_filtros_post
 
 
-def load_and_prepare(filters: Filters) -> pd.DataFrame:
-    # Ponto único que liga os filtros da UI ao get_filtered_data.
-    # Qualquer mudança na assinatura do get_filtered_data só precisa de ser feita aqui.
+def load_e_preparar(filters: Filters) -> pd.DataFrame:
+    # Ponto único que liga os filtros da UI ao get_dados_filtrados.
+    # Qualquer mudança na assinatura do get_dados_filtrados só precisa de ser feita aqui.
 
     # 1. vai à BD buscar os dados com os filtros ativos
-    raw = get_filtered_data(
+    raw = get_dados_filtrados(
         ano_letivo=filters.get("ano_letivo"),
         semestre=filters.get("semestre"),
         escola=filters.get("escola"),
@@ -26,9 +26,9 @@ def load_and_prepare(filters: Filters) -> pd.DataFrame:
         only_labs=filters.get("only_labs", False),
     )
     # 2. normaliza datas e nomes de docentes
-    df = normalize_dataframe(raw)
+    df = normalizar_dataframe(raw)
     # 3. aplica filtros de pós-query (online, ghost, sobrepostos)
-    df = apply_post_filters(
+    df = apply_filtros_post(
         df,
         hide_online=filters.get("hide_online", False),
         hide_concurrent=filters.get("hide_concurrent", False),

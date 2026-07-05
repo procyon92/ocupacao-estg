@@ -15,12 +15,12 @@ logger = logging.getLogger(__name__)
 
 _WEEKDAY_FIELD = ", ".join(f"'{d}'" for d in WEEKDAY_ORDER)
 
-def _weekday_order_clause(col: str = "d.DiaSemana") -> str:
+def _clausula_ordem_dia_semana(col: str = "d.DiaSemana") -> str:
     # Garante que os dias da semana aparecem na ordem certa (Seg → Sex)
     return f"FIELD({col}, {_WEEKDAY_FIELD})"
 
 
-def _safe_read(sql: str, conn, params=None) -> pd.DataFrame:
+def _leitura_segura(sql: str, conn, params=None) -> pd.DataFrame:
     # Corre a query e devolve um DataFrame; se der erro, mostra mensagem e devolve DF vazio
     try:
         p = tuple(params) if params else None
@@ -48,7 +48,7 @@ _FILTER_COLUMNS: dict[str, tuple[str, str, str, str, str]] = {
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_cascade_options(
+def get_opcoes_cascata(
     target_column: str,
     parent_filters: dict | None = None,
     only_labs: bool = False,
@@ -93,7 +93,7 @@ def get_cascade_options(
             f"WHERE {' AND '.join(where)} "
             f"ORDER BY val"
         )
-        df = _safe_read(sql, conn, params)
+        df = _leitura_segura(sql, conn, params)
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -103,7 +103,7 @@ def get_cascade_options(
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_anos_letivos() -> list[str]:
-    return get_cascade_options("ano_letivo")
+    return get_opcoes_cascata("ano_letivo")
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
@@ -114,7 +114,7 @@ def get_escolas() -> list[str]:
             "SELECT DISTINCT Escola_Responsavel AS val FROM Dim_Espaco "
             "WHERE Escola_Responsavel NOT IN (%s, %s) ORDER BY val"
         )
-        df = _safe_read(sql, conn, [Omisso.ND, Omisso.INDEFINIDO])
+        df = _leitura_segura(sql, conn, [Omisso.ND, Omisso.INDEFINIDO])
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -133,7 +133,7 @@ def get_departamentos() -> dict[str, str]:
             "  AND TRIM(Departamento) NOT IN (%s, %s) "
             "ORDER BY val"
         )
-        df = _safe_read(sql, conn, [Omisso.ND, Omisso.INDEFINIDO])
+        df = _leitura_segura(sql, conn, [Omisso.ND, Omisso.INDEFINIDO])
         result: dict[str, str] = {}
         for v in df.get("val", pd.Series()).tolist():
             # Remove o prefixo "Departamento de/do" para o label ficar mais limpo
@@ -147,13 +147,13 @@ def get_departamentos() -> dict[str, str]:
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_edificios(escola: str | None = None, only_labs: bool = False) -> list[str]:
     pf = {"escola": escola} if escola else {}
-    return get_cascade_options("edificio", parent_filters=pf, only_labs=only_labs)
+    return get_opcoes_cascata("edificio", parent_filters=pf, only_labs=only_labs)
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_categorias(edificio: str | None = None, only_labs: bool = False) -> list[str]:
     pf = {"edificio": edificio} if edificio else {}
-    return get_cascade_options("categoria_espaco", parent_filters=pf, only_labs=only_labs)
+    return get_opcoes_cascata("categoria_espaco", parent_filters=pf, only_labs=only_labs)
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
@@ -180,7 +180,7 @@ def get_espacos(
             f"SELECT DISTINCT Nome_Espaco AS val FROM Dim_Espaco "
             f"WHERE {' AND '.join(where)} ORDER BY val"
         )
-        df = _safe_read(sql, conn, params)
+        df = _leitura_segura(sql, conn, params)
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -188,19 +188,19 @@ def get_espacos(
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_ciclos_estudo(only_labs: bool = False) -> list[str]:
-    return get_cascade_options("ciclo_estudo", only_labs=only_labs)
+    return get_opcoes_cascata("ciclo_estudo", only_labs=only_labs)
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_cursos(ciclo: str | None = None, only_labs: bool = False) -> list[str]:
     pf = {"ciclo_estudo": ciclo} if ciclo else {}
-    return get_cascade_options("curso", parent_filters=pf, only_labs=only_labs)
+    return get_opcoes_cascata("curso", parent_filters=pf, only_labs=only_labs)
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
 def get_ucs(curso: str | None = None, only_labs: bool = False) -> list[str]:
     pf = {"curso": curso} if curso else {}
-    return get_cascade_options("uc", parent_filters=pf, only_labs=only_labs)
+    return get_opcoes_cascata("uc", parent_filters=pf, only_labs=only_labs)
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
@@ -213,7 +213,7 @@ def get_epocas() -> list[str]:
             "JOIN Dim_Epoca ep ON f.SK_Epoca = ep.SK_Epoca "
             "WHERE ep.Descricao_Epoca != %s ORDER BY val"
         )
-        df = _safe_read(sql, conn, [Omisso.ND])
+        df = _leitura_segura(sql, conn, [Omisso.ND])
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -227,9 +227,9 @@ def get_dias_semana() -> list[str]:
             "SELECT DISTINCT d.DiaSemana AS val "
             "FROM Facto_Ocupacao f JOIN Dim_Data d ON f.SK_Data = d.SK_Data "
             "WHERE d.DiaSemana NOT IN (%s, 'Domingo') "
-            f"ORDER BY {_weekday_order_clause('d.DiaSemana')}"
+            f"ORDER BY {_clausula_ordem_dia_semana('d.DiaSemana')}"
         )
-        df = _safe_read(sql, conn, [Omisso.ND])
+        df = _leitura_segura(sql, conn, [Omisso.ND])
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -251,7 +251,7 @@ def get_semanas(ano_letivo: str | None = None, semestre: int | None = None) -> l
         if semestre is not None:
             sql += " AND d.Semestre = %s"; params.append(semestre)
         sql += " ORDER BY val"
-        df = _safe_read(sql, conn, params)
+        df = _leitura_segura(sql, conn, params)
         return df["val"].tolist() if "val" in df.columns else []
     finally:
         conn.close()
@@ -260,7 +260,7 @@ def get_semanas(ano_letivo: str | None = None, semestre: int | None = None) -> l
 # Contagem de salas
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_filtered_rooms_count(
+def get_contagem_salas_filtradas(
     escola: str | None = None,
     edificio: str | None = None,
     departamento: str | None = None,
@@ -278,7 +278,7 @@ def get_filtered_rooms_count(
             f"SELECT COUNT(DISTINCT Edificio, Nome_Espaco) "
             f"FROM Dim_Espaco WHERE {' AND '.join(where)}"
         )
-        df = _safe_read(sql, conn, params)
+        df = _leitura_segura(sql, conn, params)
         return int(df.iloc[0, 0]) if not df.empty else 0
     finally:
         conn.close()
@@ -286,7 +286,7 @@ def get_filtered_rooms_count(
 
 # Queries à tabela de factos
 
-# SELECT base reutilizado em get_filtered_data — junta todas as dimensões de uma vez
+# SELECT base reutilizado em get_dados_filtrados — junta todas as dimensões de uma vez
 _FACT_SELECT = """
     SELECT
         f.ID_Ocupacao,
@@ -342,7 +342,7 @@ _FACT_SELECT = """
 
 
 @st.cache_data(ttl=CACHE_TTL_WARM)
-def get_filtered_data(
+def get_dados_filtrados(
     ano_letivo: str | None = None,
     semestre: int | None = None,
     escola: str | None = None,
@@ -357,7 +357,7 @@ def get_filtered_data(
     semana_escolar: int | None = None,
     only_labs: bool = False,
 ) -> pd.DataFrame:
-    # Filtros de pós-query (hide_online, hide_ghost, etc.) ficam em transforms.apply_post_filters()
+    # Filtros de pós-query (hide_online, hide_ghost, etc.) ficam em transforms.apply_filtros_post()
     conn = get_connection()
     try:
         sql = _FACT_SELECT
@@ -377,13 +377,13 @@ def get_filtered_data(
         if semana_escolar:    sql += " AND d.Numero_Semana_Escolar = %s";     params.append(semana_escolar)
         if only_labs:         sql += " AND e.Categoria_Espaco = %s";          params.append(LAB_CATEGORY)
 
-        return _safe_read(sql, conn, params)
+        return _leitura_segura(sql, conn, params)
     finally:
         conn.close()
 
 
 @st.cache_data(ttl=CACHE_TTL_WARM)
-def get_space_detail_data(
+def get_dados_detalhe_espaco(
     space_name: str,
     ano_escolar: str | None = None,
     semestre: int | None = None,
@@ -429,13 +429,13 @@ def get_space_detail_data(
         if semana_escolar is not None:
             sql += " AND d.Numero_Semana_Escolar = %s"; params.append(semana_escolar)
         sql += " ORDER BY d.DataCompleta, h1.Hora, h1.Minuto"
-        return _safe_read(sql, conn, params)
+        return _leitura_segura(sql, conn, params)
     finally:
         conn.close()
 
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_occupancy_by_slot(
+def get_ocupacao_por_horario(
     ano_letivo: str | None = None,
     semestre: int | None = None,
     escola: str | None = None,
@@ -466,14 +466,14 @@ def get_occupancy_by_slot(
         if semana_escolar:   sql += " AND d.Numero_Semana_Escolar = %s";  params.append(semana_escolar)
         sql += (
             f" GROUP BY d.DiaSemana, h1.Hora"
-            f" ORDER BY {_weekday_order_clause('d.DiaSemana')}, h1.Hora"
+            f" ORDER BY {_clausula_ordem_dia_semana('d.DiaSemana')}, h1.Hora"
         )
-        return _safe_read(sql, conn, params)
+        return _leitura_segura(sql, conn, params)
     finally:
         conn.close()
 
 @st.cache_data(ttl=CACHE_TTL_HOT)
-def get_free_rooms_by_interval(
+def get_salas_livres_por_intervalo(
     data_pesquisa: str,
     hora_inicio: int,
     hora_fim: int,
@@ -515,7 +515,7 @@ def get_free_rooms_by_interval(
             WHERE {' AND '.join(main_where)}
             ORDER BY e_total.Edificio, e_total.Nome_Espaco
         """
-        return _safe_read(sql, conn, subquery_params + main_params)
+        return _leitura_segura(sql, conn, subquery_params + main_params)
     finally:
         conn.close()
 
@@ -523,7 +523,7 @@ def get_free_rooms_by_interval(
 # Qualidade do ETL
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_etl_quality_metrics(
+def get_metricas_qualidade_etl(
     ano_letivo: str | None = None,
     semestre: int | None = None,
 ) -> dict[str, int]:
@@ -563,7 +563,7 @@ def get_etl_quality_metrics(
             LEFT JOIN Dim_Responsavel r         ON f.SK_Responsavel        = r.SK_Responsavel
             {where}
         """
-        df = _safe_read(sql, conn, quality_params + params)
+        df = _leitura_segura(sql, conn, quality_params + params)
         if df.empty:
             return {"total": 0, "valid": 0, "errors": 0}
         total  = int(df.iloc[0]["total"])
@@ -577,7 +577,7 @@ def get_etl_quality_metrics(
         conn.close()
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_unmapped_records_count(
+def get_contagem_registos_nao_mapeados(
     ano_letivo: str | None = None,
     semestre: int | None = None,
 ) -> dict[str, int]:
@@ -630,7 +630,7 @@ def get_unmapped_records_count(
     return result
 
 @st.cache_data(ttl=CACHE_TTL_COLD)
-def get_ghost_sessions_trend(
+def get_tendencia_sessoes_fantasma(
     ano_escolar: str | None = None,
     semestre: int | None = None,
 ) -> pd.DataFrame:
@@ -649,7 +649,7 @@ def get_ghost_sessions_trend(
         if semestre is not None:
             sql += " AND d.Semestre = %s"; params.append(semestre)
         sql += " GROUP BY d.Ano_Escolar, d.Mes ORDER BY d.Ano_Escolar, d.Mes"
-        df = _safe_read(sql, conn, params)
+        df = _leitura_segura(sql, conn, params)
         if not df.empty:
             df["Periodo"] = df["Ano_Escolar"].astype(str) + " - Mês " + df["Mes"].astype(str)
         return df
@@ -658,7 +658,7 @@ def get_ghost_sessions_trend(
 
 
 @st.cache_data(ttl=CACHE_TTL_HOT)
-def get_raw_anomalies(
+def get_anomalias_brutas(
     limit: int = 100,
     ano_letivo: str | None = None,
     semestre: int | None = None,
@@ -710,6 +710,6 @@ def get_raw_anomalies(
             sql += " AND d.Semestre = %s";    params.append(semestre)
         sql += " ORDER BY d.DataCompleta DESC LIMIT %s"
         params.append(int(limit))
-        return _safe_read(sql, conn, params)
+        return _leitura_segura(sql, conn, params)
     finally:
         conn.close()

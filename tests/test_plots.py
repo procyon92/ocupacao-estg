@@ -34,15 +34,15 @@ from plots import (
     chart_bottom_espacos,
     chart_tipo_atividade,
     chart_categoria_espaco,
-    chart_period_of_day,
-    chart_single_space_heatmap,
-    chart_anomalies_trend,
-    chart_monthly_calendar,
-    chart_critical_heatmap,
-    chart_comparison_trend,
-    chart_calendar_day,
-    chart_calendar_week,
-    chart_calendar_month,
+    chart_periodo_dia,
+    chart_heatmap_espaco_unico,
+    chart_tendencia_anomalias,
+    chart_calendario_mensal,
+    chart_heatmap_critico,
+    chart_tendencia_comparacao,
+    chart_calendario_dia,
+    chart_calendario_semana,
+    chart_calendario_mes,
 )
 
 
@@ -203,40 +203,40 @@ class TestChartCategoriaEspaco:
         assert isinstance(chart_categoria_espaco(pd.DataFrame()), go.Figure)
 
 
-# chart_period_of_day
+# chart_periodo_dia
 
 class TestChartPeriodOfDay:
 
     def test_devolve_figure(self, df_ocupacao):
-        assert isinstance(chart_period_of_day(df_ocupacao), go.Figure)
+        assert isinstance(chart_periodo_dia(df_ocupacao), go.Figure)
 
     def test_vazio_devolve_figure(self):
-        assert isinstance(chart_period_of_day(pd.DataFrame()), go.Figure)
+        assert isinstance(chart_periodo_dia(pd.DataFrame()), go.Figure)
 
     def test_sem_coluna_periodo_devolve_figure(self, df_ocupacao):
         df = df_ocupacao.drop(columns=['Periodo_Dia'])
-        assert isinstance(chart_period_of_day(df), go.Figure)
+        assert isinstance(chart_periodo_dia(df), go.Figure)
 
 
-# chart_single_space_heatmap
+# chart_heatmap_espaco_unico
 
 class TestChartSingleSpaceHeatmap:
 
     def test_devolve_figure(self, df_espaco_detalhe):
-        assert isinstance(chart_single_space_heatmap(df_espaco_detalhe), go.Figure)
+        assert isinstance(chart_heatmap_espaco_unico(df_espaco_detalhe), go.Figure)
 
     def test_vazio_devolve_figure(self):
-        assert isinstance(chart_single_space_heatmap(pd.DataFrame()), go.Figure)
+        assert isinstance(chart_heatmap_espaco_unico(pd.DataFrame()), go.Figure)
 
     def test_so_fim_de_semana_devolve_figure(self):
         df = pd.DataFrame({
             'DiaSemana':   ['Domingo'],
             'Hora_Inicio': [10],
         })
-        assert isinstance(chart_single_space_heatmap(df), go.Figure)
+        assert isinstance(chart_heatmap_espaco_unico(df), go.Figure)
 
 
-# chart_anomalies_trend
+# chart_tendencia_anomalias
 
 class TestChartAnomaliesTrend:
 
@@ -245,95 +245,95 @@ class TestChartAnomaliesTrend:
             'Periodo':     ['2024/2025 - Mês 10', '2024/2025 - Mês 11'],
             'Ghost_Count': [5, 3],
         })
-        assert isinstance(chart_anomalies_trend(df), go.Figure)
+        assert isinstance(chart_tendencia_anomalias(df), go.Figure)
 
     def test_vazio_devolve_figure(self):
-        assert isinstance(chart_anomalies_trend(pd.DataFrame()), go.Figure)
+        assert isinstance(chart_tendencia_anomalias(pd.DataFrame()), go.Figure)
 
 
-# chart_monthly_calendar
+# chart_calendario_mensal
 
 class TestChartMonthlyCalendar:
 
     def test_devolve_figure(self, df_ocupacao):
-        assert isinstance(chart_monthly_calendar(df_ocupacao, 2024, 10), go.Figure)
+        assert isinstance(chart_calendario_mensal(df_ocupacao, 2024, 10), go.Figure)
 
     def test_vazio_devolve_figure(self):
-        assert isinstance(chart_monthly_calendar(pd.DataFrame(), 2024, 10), go.Figure)
+        assert isinstance(chart_calendario_mensal(pd.DataFrame(), 2024, 10), go.Figure)
 
 
-# chart_critical_heatmap
+# chart_heatmap_critico
 
 class TestChartCriticalHeatmap:
 
     def test_devolve_figure(self, df_slot):
-        assert isinstance(chart_critical_heatmap(df_slot, total_rooms=10), go.Figure)
+        assert isinstance(chart_heatmap_critico(df_slot, total_rooms=10), go.Figure)
 
     def test_vazio_devolve_figure(self):
-        assert isinstance(chart_critical_heatmap(pd.DataFrame(), total_rooms=10), go.Figure)
+        assert isinstance(chart_heatmap_critico(pd.DataFrame(), total_rooms=10), go.Figure)
 
     def test_total_rooms_zero_devolve_figure(self, df_slot):
-        assert isinstance(chart_critical_heatmap(df_slot, total_rooms=0), go.Figure)
+        assert isinstance(chart_heatmap_critico(df_slot, total_rooms=0), go.Figure)
 
 
-# chart_comparison_trend
+# chart_tendencia_comparacao
 
 class TestChartComparisonTrend:
 
     def test_devolve_figure(self, df_ocupacao):
         rooms = {"SALA A": df_ocupacao, "SALA B": df_ocupacao}
-        assert isinstance(chart_comparison_trend(rooms), go.Figure)
+        assert isinstance(chart_tendencia_comparacao(rooms), go.Figure)
 
     def test_vazio_devolve_figure(self):
-        assert isinstance(chart_comparison_trend({}), go.Figure)
+        assert isinstance(chart_tendencia_comparacao({}), go.Figure)
 
     def test_sala_vazia_ignorada(self, df_ocupacao):
         rooms = {"SALA A": df_ocupacao, "SALA B": pd.DataFrame()}
-        assert isinstance(chart_comparison_trend(rooms), go.Figure)
+        assert isinstance(chart_tendencia_comparacao(rooms), go.Figure)
 
 
-# chart_calendar_day
+# chart_calendario_dia
 
 class TestChartCalendarDay:
 
     def test_devolve_figure(self, df_espaco_detalhe):
         date = pd.Timestamp('2024-10-15')
-        assert isinstance(chart_calendar_day(df_espaco_detalhe, date), go.Figure)
+        assert isinstance(chart_calendario_dia(df_espaco_detalhe, date), go.Figure)
 
     def test_dia_sem_aulas_devolve_figure(self, df_espaco_detalhe):
         date = pd.Timestamp('2024-12-25')  # dia sem aulas
-        assert isinstance(chart_calendar_day(df_espaco_detalhe, date), go.Figure)
+        assert isinstance(chart_calendario_dia(df_espaco_detalhe, date), go.Figure)
 
 
-# chart_calendar_week
+# chart_calendario_semana
 
 class TestChartCalendarWeek:
 
     def test_devolve_figure(self, df_espaco_detalhe):
         week = [pd.Timestamp('2024-10-14') + pd.Timedelta(days=i) for i in range(6)]
-        assert isinstance(chart_calendar_week(df_espaco_detalhe, week), go.Figure)
+        assert isinstance(chart_calendario_semana(df_espaco_detalhe, week), go.Figure)
 
     def test_semana_vazia_devolve_figure(self):
         week = [pd.Timestamp('2024-10-14') + pd.Timedelta(days=i) for i in range(6)]
         df = pd.DataFrame({'DataCompleta': pd.Series(dtype='datetime64[ns]'), 'Designacao_UC': pd.Series(dtype=str)})
-        assert isinstance(chart_calendar_week(df, week), go.Figure)
+        assert isinstance(chart_calendario_semana(df, week), go.Figure)
 
     def test_titulo_personalizado(self, df_espaco_detalhe):
         week = [pd.Timestamp('2024-10-14') + pd.Timedelta(days=i) for i in range(6)]
-        fig = chart_calendar_week(df_espaco_detalhe, week, title="Semana de teste")
+        fig = chart_calendario_semana(df_espaco_detalhe, week, title="Semana de teste")
         assert isinstance(fig, go.Figure)
 
 
-# chart_calendar_month
+# chart_calendario_mes
 
 class TestChartCalendarMonth:
 
     def test_devolve_figure(self, df_espaco_detalhe):
-        assert isinstance(chart_calendar_month(df_espaco_detalhe, 2024, 10), go.Figure)
+        assert isinstance(chart_calendario_mes(df_espaco_detalhe, 2024, 10), go.Figure)
 
     def test_mes_sem_dados_devolve_figure(self, df_espaco_detalhe):
-        assert isinstance(chart_calendar_month(df_espaco_detalhe, 2024, 12), go.Figure)
+        assert isinstance(chart_calendario_mes(df_espaco_detalhe, 2024, 12), go.Figure)
 
     def test_diferentes_meses(self, df_espaco_detalhe):
         for month in range(1, 13):
-            assert isinstance(chart_calendar_month(df_espaco_detalhe, 2024, month), go.Figure)
+            assert isinstance(chart_calendario_mes(df_espaco_detalhe, 2024, month), go.Figure)

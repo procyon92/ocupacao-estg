@@ -2,11 +2,11 @@ from __future__ import annotations
 import streamlit as st
 from models import Filters
 from view.base import BaseProfile
-from view._helpers import load_and_prepare
-from queries import get_filtered_rooms_count, get_occupancy_by_slot
-from transforms import compute_general_kpis
-from components import render_kpi, render_spacer, render_section_header
-from plots import chart_critical_heatmap
+from view._helpers import load_e_preparar
+from queries import get_contagem_salas_filtradas, get_ocupacao_por_horario
+from transforms import compute_kpis_gerais
+from components import render_kpi, render_spacer, render_cabecalho_seccao
+from plots import chart_heatmap_critico
 from config import PLOTLY_CONFIG
 
 
@@ -28,20 +28,20 @@ class AlertasProfile(BaseProfile):
             st.error("O limite baixo-médio deve ser inferior ao limite médio-alto.")
             return
 
-        df = load_and_prepare(filters)
+        df = load_e_preparar(filters)
         if df.empty:
             return self._empty()
 
-        total_rooms = get_filtered_rooms_count(
+        total_rooms = get_contagem_salas_filtradas(
             escola=filters.get("escola"),
             edificio=filters.get("edificio"),
             departamento=filters.get("departamento"),
             categoria_espaco=filters.get("categoria_espaco"),
         )
-        kpi            = compute_general_kpis(df)
+        kpi            = compute_kpis_gerais(df)
         espacos_livres = max(total_rooms - kpi["espacos_ocupados"], 0)
 
-        df_slots = get_occupancy_by_slot(
+        df_slots = get_ocupacao_por_horario(
             ano_letivo=filters.get("ano_letivo"),
             semestre=filters.get("semestre"),
             escola=filters.get("escola"),
@@ -68,14 +68,14 @@ class AlertasProfile(BaseProfile):
         with k4: render_kpi("Tx. Crítica",    f"{tx_critica}%", "🔴")
 
         render_spacer(1.2)
-        render_section_header("Mapa de Ocupação Crítica")
+        render_cabecalho_seccao("Mapa de Ocupação Crítica")
         st.plotly_chart(
-            chart_critical_heatmap(df_slots, total_rooms, low_threshold, high_threshold),
+            chart_heatmap_critico(df_slots, total_rooms, low_threshold, high_threshold),
             use_container_width=True, key="chart_critical_heat", config= PLOTLY_CONFIG
         )
 
         render_spacer()
-        render_section_header("Slots Críticos")
+        render_cabecalho_seccao("Slots Críticos")
         if not df_slots.empty:
             df_slots["Nível"] = df_slots["ratio"].apply(
                 lambda r: "🔴 Alta" if r > high_threshold

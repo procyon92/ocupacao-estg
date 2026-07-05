@@ -2,7 +2,7 @@
 test_extract.py — Testes unitários para o módulo extract.py do pipeline ETL.
 
 Cobre:
-  - _normalize_columns  : normalização de nomes de colunas para snake_case
+  - _normalizar_colunas  : normalização de nomes de colunas para snake_case
   - _sanitize_strings   : limpeza de caracteres espúrios em colunas de texto
   - extract_csv         : leitura e normalização de ficheiros CSV
   - extract_sql_dump    : parsing de ficheiros SQL e extração de registos
@@ -39,43 +39,43 @@ def write_file(path: Path, content: str, encoding: str = "utf-8"):
     path.write_text(content, encoding=encoding)
 
 
-# _normalize_columns
+# _normalizar_colunas
 
 class TestNormalizeColumns:
 
     def test_maiusculas_para_minusculas(self):
         df = pd.DataFrame(columns=["Nome", "EDIFICIO", "DataInicio"])
-        result = DataExtractor._normalize_columns(df)
+        result = DataExtractor._normalizar_colunas(df)
         assert list(result.columns) == ["nome", "edificio", "datainicio"]
 
     def test_espacos_para_underscore(self):
         df = pd.DataFrame(columns=["data inicio", "nome espaco"])
-        result = DataExtractor._normalize_columns(df)
+        result = DataExtractor._normalizar_colunas(df)
         assert "data_inicio" in result.columns
         assert "nome_espaco" in result.columns
 
     def test_caracteres_especiais_para_underscore(self):
         df = pd.DataFrame(columns=["col.um", "col-dois", "col/tres"])
-        result = DataExtractor._normalize_columns(df)
+        result = DataExtractor._normalizar_colunas(df)
         for col in result.columns:
             assert col.replace("_", "").isalnum()
 
     def test_virgula_final_removida(self):
         df = pd.DataFrame(columns=["nome,", "edificio,,"])
-        result = DataExtractor._normalize_columns(df)
+        result = DataExtractor._normalizar_colunas(df)
         for col in result.columns:
             assert not col.endswith(",")
 
     def test_underscores_inicio_fim_removidos(self):
         df = pd.DataFrame(columns=[" nome ", "_col_"])
-        result = DataExtractor._normalize_columns(df)
+        result = DataExtractor._normalizar_colunas(df)
         for col in result.columns:
             assert not col.startswith("_")
             assert not col.endswith("_")
 
     def test_coluna_ja_normalizada_inalterada(self):
         df = pd.DataFrame(columns=["edificio", "nome_espaco"])
-        result = DataExtractor._normalize_columns(df)
+        result = DataExtractor._normalizar_colunas(df)
         assert list(result.columns) == ["edificio", "nome_espaco"]
 
 

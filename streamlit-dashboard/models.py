@@ -26,7 +26,7 @@ class Filters(TypedDict, total=False):
 class SessionKeys:
     # Registo central de todas as chaves do st.session_state usadas na app.
     # Usar estas constantes em vez de strings diretas evita erros de digitação
-    # e garante que _reset_filters() limpa sempre tudo o que devia limpar.
+    # e garante que _repor_filtros() limpa sempre tudo o que devia limpar.
 
     # Valores dos filtros
     ANO_LETIVO      = "filter_ano_letivo"
@@ -56,7 +56,7 @@ class SessionKeys:
     CAL_YEAR        = "cal_year"
     CAL_MONTH       = "cal_month"
 
-    # Todas as chaves que o _reset_filters() deve limpar
+    # Todas as chaves que o _repor_filtros() deve limpar
     RESETTABLE: tuple = (
         ANO_LETIVO, SEMESTRE, SEMANA, DIAS,
         ESCOLA, DEPARTAMENTO, EDIFICIO, CATEGORIA, ESPACO,

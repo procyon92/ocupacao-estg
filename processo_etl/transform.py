@@ -160,7 +160,7 @@ class DataTransformer:
                 df[col] = df[col].fillna('SEM_UNIDADE / RESERVA_ADMIN')
         return df
 
-    def _marcar_reserva_sem_uc(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _flag_reserva_sem_uc (self, df: pd.DataFrame) -> pd.DataFrame:
         col_uc   = next((c for c in ['cod_disc', 'codigo_unidade_curricular'] if c in df.columns), None)
         col_tipo = 'tipo' if 'tipo' in df.columns else None
         if col_uc and col_tipo:
@@ -553,7 +553,7 @@ class DataTransformer:
         df_main = self._limpar_strings(df_main)
         df_main = self._imputar_responsavel(df_main)
         df_main = self._imputar_dummy_academico(df_main)
-        df_main = self._marcar_reserva_sem_uc(df_main)
+        df_main = self._flag_reserva_sem_uc (df_main)
         df_main = self._normalizar_edificios(df_main)
         df_main = self._extrair_turno(df_main)
         df_main = self._aplicar_filtros_negocio(df_main)

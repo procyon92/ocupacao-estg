@@ -119,3 +119,9 @@ class LaboratoriosProfile(BaseProfile):
             "Horas Totais", "Média Presenças", "Duração Média por Sessão", "Carga",
         ]
         st.dataframe(summary, use_container_width=True, hide_index=True)
+        st.caption(
+            f"🔴 Alta: mais de {q75:.0f} sessões  ·  "
+            f"🟡 Média: entre {q50:.0f} e {q75:.0f} sessões  ·  "
+            f"🟢 Baixa: até {q50:.0f} sessões  "
+            "(classificação baseada nos quartis 50 e 75 do nº de sessões dos laboratórios apresentados)."
+        )

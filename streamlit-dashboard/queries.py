@@ -553,10 +553,12 @@ def get_metricas_qualidade_etl(
                       OR c.Nome_Curso = %s
                       OR c.Codigo_Curso = %s
                       OR r.Docente_Responsavel IN (%s, %s)
+                      OR h1.Hora < 8
                     THEN 1 ELSE 0
                 END) AS errors
             FROM Facto_Ocupacao f
             JOIN Dim_Data d                     ON f.SK_Data              = d.SK_Data
+            JOIN Dim_Hora h1                    ON f.SK_Hora_Inicio       = h1.SK_Hora
             LEFT JOIN Dim_Espaco e              ON f.SK_Espaco             = e.SK_Espaco
             LEFT JOIN Dim_Unidade_Curricular uc ON f.SK_Unidade_Curricular = uc.SK_Unidade_Curricular
             LEFT JOIN Dim_Curso c               ON f.SK_Curso              = c.SK_Curso
@@ -615,6 +617,12 @@ def get_contagem_registos_nao_mapeados(
             f"WHERE f.Numero_Presencas = 0{period_where}",
             period_params,
         ),
+        "Horário Invulgar (00h-08h)": (
+            f"SELECT COUNT(*) FROM Facto_Ocupacao f {period_join} "
+            f"JOIN Dim_Hora h1 ON f.SK_Hora_Inicio = h1.SK_Hora "
+            f"WHERE h1.Hora < 8{period_where}",
+            period_params,
+        ),
     }
     result: dict[str, int] = {}
     try:
@@ -662,7 +670,10 @@ def get_anomalias_brutas(
     limit: int = 100,
     ano_letivo: str | None = None,
     semestre: int | None = None,
+    tipo_anomalia: str | None = None,
 ) -> pd.DataFrame:
+    # tipo_anomalia restringe a UMA categoria: "ghost", "uc", "curso", "resp" ou "hora".
+    # Se None, devolve qualquer registo com pelo menos uma anomalia (comportamento original).
     conn = get_connection()
     try:
         sql = """
@@ -679,7 +690,8 @@ def get_anomalias_brutas(
                 CASE WHEN f.Numero_Presencas = 0              THEN 'Ghost'          ELSE NULL END AS Ghost_Flag,
                 CASE WHEN uc.Designacao_UC IN (%s, %s)        THEN 'Unmapped_UC'    ELSE NULL END AS UC_Flag,
                 CASE WHEN c.Nome_Curso = %s                   THEN 'Unmapped_Curso' ELSE NULL END AS Curso_Flag,
-                CASE WHEN r.Docente_Responsavel IN (%s, %s)   THEN 'Unmapped_Resp'  ELSE NULL END AS Resp_Flag
+                CASE WHEN r.Docente_Responsavel IN (%s, %s)   THEN 'Unmapped_Resp'  ELSE NULL END AS Resp_Flag,
+                CASE WHEN h1.Hora < 8                         THEN 'Horario_Invulgar' ELSE NULL END AS Hora_Flag
             FROM Facto_Ocupacao f
             JOIN Dim_Data d                ON f.SK_Data                = d.SK_Data
             JOIN Dim_Hora h1               ON f.SK_Hora_Inicio         = h1.SK_Hora
@@ -689,21 +701,47 @@ def get_anomalias_brutas(
             JOIN Dim_Curso c               ON f.SK_Curso               = c.SK_Curso
             JOIN Dim_Responsavel r         ON f.SK_Responsavel         = r.SK_Responsavel
             JOIN Dim_Tipo_Atividade ta     ON f.SK_Tipo_Atividade      = ta.SK_Tipo_Atividade
-            WHERE (
-                f.Numero_Presencas = 0
-                OR uc.Designacao_UC IN (%s, %s)
-                OR c.Nome_Curso = %s
-                OR r.Docente_Responsavel IN (%s, %s)
-            )
+            WHERE ({condicao})
         """
-        params = [
-            Omisso.ND, Omisso.SEM_UNIDADE,
-            Omisso.ND,
-            Omisso.ND, Omisso.INDEFINIDO,
-            Omisso.ND, Omisso.SEM_UNIDADE,
-            Omisso.ND,
-            Omisso.ND, Omisso.INDEFINIDO,
-        ]
+        _condicoes_unicas = {
+            "ghost":    "f.Numero_Presencas = 0",
+            "uc":       "uc.Designacao_UC IN (%s, %s)",
+            "curso":    "c.Nome_Curso = %s",
+            "uc_curso": "uc.Designacao_UC IN (%s, %s) OR c.Nome_Curso = %s",
+            "resp":     "r.Docente_Responsavel IN (%s, %s)",
+            "hora":     "h1.Hora < 8",
+        }
+        _params_unicos = {
+            "ghost":    [],
+            "uc":       [Omisso.ND, Omisso.SEM_UNIDADE],
+            "curso":    [Omisso.ND],
+            "uc_curso": [Omisso.ND, Omisso.SEM_UNIDADE, Omisso.ND],
+            "resp":     [Omisso.ND, Omisso.INDEFINIDO],
+            "hora":     [],
+        }
+        if tipo_anomalia and tipo_anomalia in _condicoes_unicas:
+            sql = sql.format(condicao=_condicoes_unicas[tipo_anomalia])
+            params = [
+                Omisso.ND, Omisso.SEM_UNIDADE,
+                Omisso.ND,
+                Omisso.ND, Omisso.INDEFINIDO,
+            ] + _params_unicos[tipo_anomalia]
+        else:
+            sql = sql.format(condicao=(
+                "f.Numero_Presencas = 0 "
+                "OR uc.Designacao_UC IN (%s, %s) "
+                "OR c.Nome_Curso = %s "
+                "OR r.Docente_Responsavel IN (%s, %s) "
+                "OR h1.Hora < 8"
+            ))
+            params = [
+                Omisso.ND, Omisso.SEM_UNIDADE,
+                Omisso.ND,
+                Omisso.ND, Omisso.INDEFINIDO,
+                Omisso.ND, Omisso.SEM_UNIDADE,
+                Omisso.ND,
+                Omisso.ND, Omisso.INDEFINIDO,
+            ]
         if ano_letivo:
             sql += " AND d.Ano_Escolar = %s"; params.append(ano_letivo)
         if semestre:

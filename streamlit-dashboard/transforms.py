@@ -85,4 +85,5 @@ def combine_flags_anomalia(row: pd.Series) -> str:
     if row.get("UC_Flag"):     flags.append("📚 UC N/D")
     if row.get("Curso_Flag"):  flags.append("🎓 Curso N/D")
     if row.get("Resp_Flag"):   flags.append("👤 Resp. N/D")
+    if row.get("Hora_Flag"):   flags.append("🌙 Horário Invulgar")
     return " | ".join(flags) if flags else "—"
